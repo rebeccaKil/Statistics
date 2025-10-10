@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: ai-excel-analyzer-py
+    runtime: docker
+    repo: https://github.com/rebeccaKil/Statistics
+    branch: main
+    rootDir: python-backend
+    plan: free
+    envVars:
+      - key: PORT
+        value: 8080
+    healthCheckPath: /health
+
