@@ -1,15 +1,14 @@
 services:
   - type: web
     name: ai-excel-analyzer-frontend
-    runtime: node
+    runtime: docker
     repo: https://github.com/rebeccaKil/Statistics
     branch: main
-    rootDir: .
-    buildCommand: npm install && npm run build
-    startCommand: npm start
     plan: free
     envVars:
       - key: NODE_ENV
         value: production
       - key: NEXT_PUBLIC_API_URL
         value: https://statistics-49nt.onrender.com
+      - key: PORT
+        value: 3000

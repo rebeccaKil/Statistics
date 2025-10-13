@@ -1,8 +1,6 @@
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Any, Dict, List, Optional
 from collections import Counter
@@ -55,18 +53,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files for Next.js frontend (only if directories exist)
-import os
-
-# Mount Next.js static build output
-if os.path.exists("../out"):
-    app.mount("/", StaticFiles(directory="../out", html=True), name="frontend")
-
-# Mount public assets
-if os.path.exists("../public"):
-    app.mount("/static", StaticFiles(directory="../public"), name="public_static")
-
-# API routes (static files are handled by the mount above)
+# API routes
 
 
 @app.get("/health")
