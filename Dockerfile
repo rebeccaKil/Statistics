@@ -38,5 +38,5 @@ COPY --from=frontend-builder /app/node_modules ./node_modules
 
 EXPOSE 8080
 
-# Start both services
-CMD ["sh", "-c", "npm start & uvicorn app.main:app --host 0.0.0.0 --port 8080"]
+# Start FastAPI with static file serving
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]

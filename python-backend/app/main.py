@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Any, Dict, List, Optional
 from collections import Counter
@@ -53,10 +55,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount static files for Next.js frontend
+app.mount("/_next", StaticFiles(directory="../.next/static"), name="next_static")
+app.mount("/static", StaticFiles(directory="../public"), name="public_static")
+
+# Serve Next.js static files
+import os
 
 @app.get("/")
 def root():
-    return {"status": "ok"}
+    # Try to serve the built Next.js index.html
+    index_path = "../.next/server/pages/index.html"
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    else:
+        # Fallback to public/index.html if it exists
+        fallback_path = "../public/index.html"
+        if os.path.exists(fallback_path):
+            return FileResponse(fallback_path)
+        else:
+            return {"status": "ok", "message": "Frontend files not found"}
 
 
 @app.get("/health")
