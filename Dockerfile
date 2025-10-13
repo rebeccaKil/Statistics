@@ -30,11 +30,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY python-backend/app ./app
 
-# Copy built frontend and install production dependencies
-COPY --from=frontend-builder /app/.next ./.next
+# Copy built frontend static files
+COPY --from=frontend-builder /app/out ./out
 COPY --from=frontend-builder /app/public ./public
-COPY --from=frontend-builder /app/package*.json ./
-COPY --from=frontend-builder /app/node_modules ./node_modules
 
 EXPOSE 8080
 

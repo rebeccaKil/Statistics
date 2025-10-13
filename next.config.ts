@@ -1,8 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Vercel 배포를 위한 최적화 설정
-  output: 'standalone',
+  // 정적 사이트 빌드를 위한 설정
+  output: 'export',
+  trailingSlash: true,
+  distDir: 'out',
   
   // 이미지 최적화 설정
   images: {
