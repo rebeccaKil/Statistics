@@ -140,7 +140,7 @@ export function ControlPanel({ onDataProcessed, onAnalysisStart }: ControlPanelP
           }`}
         >
           <BrainCircuit className="mr-2 h-5 w-5" />
-          AI 분석 시작하기
+          데이터 분석 시작하기
         </button>
       </div>
     </div>

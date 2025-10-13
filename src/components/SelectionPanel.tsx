@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Image as ImageIcon } from 'lucide-react';
 import { InfographicComponent } from '@/types';
 import { colorOptions } from '@/lib/colorUtils';
@@ -18,17 +18,15 @@ export function SelectionPanel({ components, onRender, onColorChange, onMetaChan
     components.map((_, index) => index)
   );
 
-  // 컴포넌트 목록이 바뀌면 선택 상태를 초기화(모두 선택)
-  useEffect(() => {
-    setSelectedItems(components.map((_, index) => index));
-  }, [components]);
+  // 선택 상태는 사용자가 변경한 값을 유지하도록 초기화 리셋을 제거합니다.
 
   const handleCheckboxChange = (index: number, checked: boolean) => {
-    if (checked) {
-      setSelectedItems([...selectedItems, index]);
-    } else {
-      setSelectedItems(selectedItems.filter(item => item !== index));
-    }
+    const next = checked
+      ? [...selectedItems, index]
+      : selectedItems.filter(item => item !== index);
+    setSelectedItems(next);
+    // 선택 변경을 즉시 부모에 반영
+    onRender(next);
   };
 
   const handleRender = () => {
@@ -64,8 +62,8 @@ export function SelectionPanel({ components, onRender, onColorChange, onMetaChan
                 {onMetaChange ? (
                   <input
                     type="text"
-                    defaultValue={(component as { title?: string }).title}
-                    onBlur={(e) => onMetaChange(index, { title: e.target.value })}
+                    value={(component as { title?: string }).title || ''}
+                    onChange={(e) => onMetaChange(index, { title: e.target.value })}
                     className="flex-1 text-sm font-medium p-1 border rounded bg-white text-slate-700 border-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                     placeholder="제목"
                   />
