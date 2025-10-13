@@ -14,8 +14,12 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
+# Install Node.js and npm
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
+    curl \
+    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -26,13 +30,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY python-backend/app ./app
 
-# Copy built frontend
+# Copy built frontend and install production dependencies
 COPY --from=frontend-builder /app/.next ./.next
 COPY --from=frontend-builder /app/public ./public
 COPY --from=frontend-builder /app/package*.json ./
-
-# Install only production dependencies for runtime
-RUN npm ci --only=production
+COPY --from=frontend-builder /app/node_modules ./node_modules
 
 EXPOSE 8080
 
