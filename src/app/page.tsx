@@ -33,8 +33,7 @@ export default function Home() {
 
     try {
       // Python 분석 API 호출 (단일 단계 처리)
-      const apiUrl = process.env.NEXT_PUBLIC_ANALYZE_API_URL as string;
-      if (!apiUrl) throw new Error('분석 API URL이 설정되지 않았습니다. NEXT_PUBLIC_ANALYZE_API_URL 환경변수를 설정해주세요.');
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || window.location.origin;
 
       setLoadingMessage('서버에서 통계 데이터를 계산 중입니다...');
       const resp = await fetch(`${apiUrl.replace(/\/$/, '')}/analyze`, {
