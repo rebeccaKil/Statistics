@@ -4,7 +4,7 @@ services:
     runtime: docker
     repo: https://github.com/rebeccaKil/Statistics
     branch: main
-    rootDir: python-backend
+    dockerfilePath: python-backend/Dockerfile
     plan: free
     envVars:
       - key: PORT
