@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Excel Analyzer",
-  description: "AI 기반 엑셀 데이터 분석 및 인포그래픽 생성기",
+  title: "Data Analyzer",
+  description: "엑셀 데이터 분석 및 인포그래픽 생성기",
 };
 
 export default function RootLayout({
