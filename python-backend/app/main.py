@@ -55,6 +55,9 @@ app.add_middleware(
 
 # API routes
 
+@app.get("/")
+def root():
+    return {"message": "AI Excel Analyzer API", "status": "running"}
 
 @app.get("/health")
 def health():

@@ -33,7 +33,7 @@ export default function Home() {
 
     try {
       // Python 분석 API 호출 (단일 단계 처리)
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || window.location.origin;
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://statistics-49nt.onrender.com';
 
       setLoadingMessage('서버에서 통계 데이터를 계산 중입니다...');
       const resp = await fetch(`${apiUrl.replace(/\/$/, '')}/analyze`, {
