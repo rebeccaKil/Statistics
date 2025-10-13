@@ -55,26 +55,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files for Next.js frontend
-app.mount("/_next", StaticFiles(directory="../.next/static"), name="next_static")
-app.mount("/static", StaticFiles(directory="../public"), name="public_static")
+# Mount static files for Next.js frontend (only if directories exist)
+import os
+
+# Mount Next.js static assets
+if os.path.exists("../.next/static"):
+    app.mount("/_next/static", StaticFiles(directory="../.next/static"), name="next_static")
+
+# Mount public assets
+if os.path.exists("../public"):
+    app.mount("/static", StaticFiles(directory="../public"), name="public_static")
+
+# Mount Next.js build output
+if os.path.exists("../.next"):
+    app.mount("/_next", StaticFiles(directory="../.next"), name="next_build")
 
 # Serve Next.js static files
-import os
 
 @app.get("/")
 def root():
     # Try to serve the built Next.js index.html
-    index_path = "../.next/server/pages/index.html"
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
-    else:
-        # Fallback to public/index.html if it exists
-        fallback_path = "../public/index.html"
-        if os.path.exists(fallback_path):
-            return FileResponse(fallback_path)
-        else:
-            return {"status": "ok", "message": "Frontend files not found"}
+    possible_paths = [
+        "../.next/server/pages/index.html",
+        "../.next/static/index.html", 
+        "../public/index.html",
+        "../index.html"
+    ]
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            return FileResponse(path)
+    
+    # If no HTML file found, return a simple HTML response
+    return FileResponse("../public/index.html") if os.path.exists("../public/index.html") else {"status": "ok", "message": "Frontend files not found"}
 
 
 @app.get("/health")
