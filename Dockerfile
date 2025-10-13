@@ -3,7 +3,7 @@ FROM node:18-alpine AS frontend-builder
 
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci
 
 COPY . .
 RUN npm run build
@@ -30,9 +30,8 @@ COPY python-backend/app ./app
 COPY --from=frontend-builder /app/.next ./.next
 COPY --from=frontend-builder /app/public ./public
 COPY --from=frontend-builder /app/package*.json ./
-COPY --from=frontend-builder /app/node_modules ./node_modules
 
-# Install production dependencies
+# Install only production dependencies for runtime
 RUN npm ci --only=production
 
 EXPOSE 8080
