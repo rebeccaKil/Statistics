@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import numpy as np
 from datetime import datetime
+import re
 
 # NLP imports with graceful fallbacks
 try:
@@ -31,7 +32,10 @@ class AnalyzeRequest(BaseModel):
     rows: List[Dict[str, Any]]
     year: int
     month: int
-    reportType: str  # 'single' | 'comparison'
+    reportType: str  # 'single' | 'comparison' | 'cumulative'
+    value_column: Optional[str] = None
+    bar_columns: Optional[List[str]] = None
+    line_columns: Optional[List[str]] = None
 
 
 class Component(BaseModel):
@@ -57,7 +61,7 @@ app.add_middleware(
 
 @app.get("/")
 def root():
-    return {"message": "AI Excel Analyzer API", "status": "running"}
+    return {"message": "AI Excel Analyzer API", "status": "running", "version": "cumulative-v1.0"}
 
 @app.get("/health")
 def health():
@@ -72,13 +76,44 @@ def try_parse_date(value: Any) -> Optional[datetime]:
     if isinstance(value, (int, float)):
         return None
     s = str(value)
+    # 1) 완전한 일자 형식
     for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S"):
         try:
             return datetime.strptime(s[:19], fmt)
         except Exception:
             continue
+    # 2) 월/연도만 있는 형식 보강 (예: 01/2025, 01-2025, 2025-01, 2025/01, 01.2025)
+    for fmt in ("%m/%Y", "%m-%Y", "%m.%Y", "%Y-%m", "%Y/%m"):
+        try:
+            dt = datetime.strptime(s.strip(), fmt)
+            # 일 정보가 없으므로 월의 1일로 보정
+            return datetime(dt.year, dt.month, 1)
+        except Exception:
+            continue
     try:
         return pd.to_datetime(s, errors='coerce').to_pydatetime()
+    except Exception:
+        return None
+
+
+def to_number(value: Any) -> Optional[float]:
+    """문자열 수치(쉼표/퍼센트/기호 포함)를 숫자로 변환."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    s = str(value).strip()
+    if s == '' or s.lower() in {'nan', 'none'}:
+        return None
+    # 화살표/기호/한글 제거, 쉼표 제거
+    s = s.replace(',', '')
+    s = re.sub(r'[▲▼%\+\-]?\s*', lambda m: '-' if m.group(0).strip() == '▼' else '', s)
+    # 숫자/소수점/부호만 남김
+    s = re.sub(r'[^0-9\.-]', '', s)
+    if s in {'', '-', '.', '-.'}:
+        return None
+    try:
+        return float(s)
     except Exception:
         return None
 
@@ -573,6 +608,90 @@ def analyze(req: AnalyzeRequest):
             # 폴백 2: 그래도 없으면 전체 데이터로 집계(피크일자는 N/A)
             if not current_stats:
                 current_stats = calc_stats(df, None, cat_cols, text_col)
+
+        if req.reportType == 'cumulative':
+            # 날짜 컬럼을 안정적으로 재탐지 (헤더가 달라도 동작)
+            inferred_date_col = None
+            best_ratio = -1.0
+            for col in df.columns:
+                parsed_try = df[col].apply(try_parse_date)
+                ratio = parsed_try.notnull().mean()
+                if ratio > best_ratio:
+                    best_ratio = ratio
+                    inferred_date_col = col
+                    parsed_dates = parsed_try
+            if inferred_date_col is None or best_ratio <= 0:
+                return JSONResponse(status_code=400, content={"error": "누적 리포트: 날짜 컬럼을 찾을 수 없습니다."})
+
+            # 기준월까지의 월별 합계와 누적 합계 계산 (강건한 파싱)
+            periods = pd.to_datetime(parsed_dates, errors='coerce').dt.to_period('M')
+            target_period = pd.Period(f"{target_year}-{target_month:02d}", freq='M')
+            mask = periods <= target_period
+            df_cum = df.loc[mask].copy()
+            df_cum['_ym'] = periods[mask].dt.strftime('%Y-%m')
+            # 수치형 후보 컬럼 찾기 (문자 포함 숫자도 변환)
+            for c in df.columns:
+                if not pd.api.types.is_numeric_dtype(df[c]):
+                    try:
+                        converted = df[c].map(to_number)
+                        if converted.notnull().any():
+                            df[c] = converted
+                    except Exception:
+                        pass
+            numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+            value_col = (req.value_column if req.value_column in df.columns else None)
+            for pref in ['문의생성', '예약확정', '이메일']:
+                if value_col is None and pref in df.columns and pd.api.types.is_numeric_dtype(df[pref]):
+                    value_col = pref
+            if value_col is None and numeric_cols:
+                value_col = numeric_cols[0]
+
+            monthly = (
+                df_cum.groupby('_ym')[value_col].sum().reset_index().sort_values('_ym')
+                if value_col else pd.DataFrame(columns=['_ym', 'val'])
+            )
+            if value_col:
+                monthly.rename(columns={value_col: 'val'}, inplace=True)
+                monthly['cum'] = monthly['val'].cumsum()
+                cum_data = [{ 'name': r['_ym'], 'count': int(r['val']), 'cumulative': int(r['cum']) } for _, r in monthly.iterrows()]
+            else:
+                cum_data = []
+
+            # 멀티 시리즈(바/라인) 구성
+            labels = monthly['_ym'].tolist() if not monthly.empty else []
+            def build_series(cols: List[str]) -> List[Dict[str, Any]]:
+                series: List[Dict[str, Any]] = []
+                for col in cols:
+                    if col in df_cum.columns and pd.api.types.is_numeric_dtype(df_cum[col]):
+                        agg = df_cum.groupby('_ym')[col].sum().reindex(labels).fillna(0)
+                        series.append({ 'label': col, 'values': [int(v) for v in agg.tolist()] })
+                return series
+
+            bar_cols = req.bar_columns or []
+            line_cols = req.line_columns or []
+            if not bar_cols and not line_cols:
+                # 자동 배치: 숫자형 상위 2개는 바, 나머지는 라인
+                numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+                bar_cols = numeric_cols[:2]
+                line_cols = numeric_cols[2:]
+
+            multi_payload = {
+                'labels': labels,
+                'bars': build_series(bar_cols),
+                'lines': build_series(line_cols),
+                'lineCumulative': False
+            }
+
+            components = []  # type: ignore
+            components.append(Component(
+                component_type='cumulative_chart',
+                title=f'누적 리포트 - {target_year}-{target_month:02d}까지',
+                source_column=value_col or 'value',
+                icon='trending-up',
+                color='indigo',
+                data=multi_payload
+            ))
+            return [c.dict() for c in components]
 
         if req.reportType == 'single' or not date_col:
             components = build_components_single(current_stats, cat_cols)

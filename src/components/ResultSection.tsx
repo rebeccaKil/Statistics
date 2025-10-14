@@ -7,6 +7,7 @@ import { ComparisonKPI } from './infographic/ComparisonKPI';
 import { ComparisonBarChart } from './infographic/ComparisonBarChart';
 import { DailyBreakdown } from './infographic/DailyBreakdown';
 import { Summary } from './infographic/Summary';
+import { CumulativeChart } from './infographic/CumulativeChart';
 import { InfographicComponent } from '@/types';
 
 interface ResultSectionProps {
@@ -77,6 +78,8 @@ function renderComponent(component: InfographicComponent) {
       return <DailyBreakdown {...component} />;
     case 'summary':
       return <Summary {...component} />;
+    case 'cumulative_chart':
+      return <CumulativeChart {...component} />;
     default:
       return <div>Unknown component type</div>;
   }

@@ -15,12 +15,31 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [showSelectionPanel, setShowSelectionPanel] = useState(false);
+  const [cumulativeValueColumn, setCumulativeValueColumn] = useState<string | undefined>(undefined);
+  const [barColumns, setBarColumns] = useState<string[] | undefined>(undefined);
+  const [lineColumns, setLineColumns] = useState<string[] | undefined>(undefined);
 
   // Gemini 제거, Python API로 대체
 
   const handleDataProcessed = (data: ExcelData[]) => {
     setExcelData(data);
   };
+  // ControlPanel에서 누적용 valueColumn을 이벤트로 전달받아 저장
+  if (typeof window !== 'undefined') {
+    window.addEventListener('cumulative:valueColumn', (e: Event) => {
+      const custom = e as CustomEvent<string>;
+      setCumulativeValueColumn(custom.detail);
+    }, { once: true });
+    window.addEventListener('cumulative:barColumns', (e: Event) => {
+      const custom = e as CustomEvent<string[]>;
+      setBarColumns(custom.detail);
+    }, { once: true });
+    window.addEventListener('cumulative:lineColumns', (e: Event) => {
+      const custom = e as CustomEvent<string[]>;
+      setLineColumns(custom.detail);
+    }, { once: true });
+  }
+
 
   // Gemini 제거됨
 
@@ -39,7 +58,7 @@ export default function Home() {
       const resp = await fetch(`${apiUrl.replace(/\/$/, '')}/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows: excelData, year, month, reportType })
+        body: JSON.stringify({ rows: excelData, year, month, reportType, value_column: cumulativeValueColumn, bar_columns: barColumns, line_columns: lineColumns })
       });
       if (!resp.ok) {
         const txt = await resp.text();

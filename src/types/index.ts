@@ -98,13 +98,34 @@ export interface SummaryComponent {
   };
 }
 
+export interface CumulativeChartComponent {
+  component_type: 'cumulative_chart';
+  title: string;
+  source_column: string;
+  icon: string;
+  color: string;
+  data:
+    | Array<{
+        name: string; // YYYY-MM
+        count: number; // 월별 값
+        cumulative: number; // 누적 합계
+      }>
+    | {
+        labels: string[]; // YYYY-MM
+        bars: Array<{ label: string; values: number[] }>;
+        lines: Array<{ label: string; values: number[] }>;
+        lineCumulative?: boolean;
+      };
+}
+
 export type InfographicComponent = 
   | KPIComponent 
   | BarChartComponent 
   | ComparisonKPIComponent 
   | ComparisonBarChartComponent
   | DailyBreakdownComponent
-  | SummaryComponent;
+  | SummaryComponent
+  | CumulativeChartComponent;
 
 export interface MonthStats {
   total_count: number;

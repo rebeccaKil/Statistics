@@ -15,8 +15,11 @@ export function ControlPanel({ onDataProcessed, onAnalysisStart }: ControlPanelP
   const [activeTab, setActiveTab] = useState<'file' | 'link'>('file');
   const [year, setYear] = useState(2025);
   const [month, setMonth] = useState(8);
-  const [reportType, setReportType] = useState<'single' | 'comparison'>('single');
+  const [reportType, setReportType] = useState<'single' | 'comparison' | 'cumulative'>('single');
   const [hasData, setHasData] = useState(false);
+  const [valueColumn, setValueColumn] = useState('');
+  const [barCols, setBarCols] = useState('');
+  const [lineCols, setLineCols] = useState('');
   
 
   const handleDataLoaded = (data: ExcelData[]) => {
@@ -27,6 +30,15 @@ export function ControlPanel({ onDataProcessed, onAnalysisStart }: ControlPanelP
   
 
   const handleAnalysis = () => {
+    if (reportType === 'cumulative' && valueColumn) {
+      window.dispatchEvent(new CustomEvent('cumulative:valueColumn', { detail: valueColumn }));
+    }
+    if (reportType === 'cumulative') {
+      const bars = barCols.split(',').map(s => s.trim()).filter(Boolean);
+      const lines = lineCols.split(',').map(s => s.trim()).filter(Boolean);
+      window.dispatchEvent(new CustomEvent('cumulative:barColumns', { detail: bars }));
+      window.dispatchEvent(new CustomEvent('cumulative:lineColumns', { detail: lines }));
+    }
     onAnalysisStart(year, month, reportType);
   };
 
@@ -123,9 +135,55 @@ export function ControlPanel({ onDataProcessed, onAnalysisStart }: ControlPanelP
               />
               <span className="text-slate-700 font-medium">전월 비교</span>
             </label>
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                name="report-type"
+                value="cumulative"
+                checked={reportType === 'cumulative'}
+                onChange={(e) => setReportType(e.target.value as 'cumulative')}
+                className="mr-2 h-4 w-4 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span className="text-slate-700 font-medium">누적 합계</span>
+            </label>
           </div>
         </div>
-        
+        {reportType === 'cumulative' && (
+          <div className="md:col-span-2">
+            <label className="font-bold text-slate-700 text-lg">5. 대상 컬럼(누적용)</label>
+            <input
+              type="text"
+              value={valueColumn}
+              onChange={(e) => setValueColumn(e.target.value)}
+              className="mt-2 w-full p-3 border border-slate-300 rounded-md bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              placeholder="예: 문의생성"
+            />
+            <p className="text-xs text-slate-500 mt-1">미입력 시 자동으로 수치형 첫 컬럼이 사용됩니다.</p>
+
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="font-bold text-slate-700 text-sm">막대에 표시할 컬럼(쉼표로 구분)</label>
+                <input
+                  type="text"
+                  value={barCols}
+                  onChange={(e) => setBarCols(e.target.value)}
+                  className="mt-2 w-full p-2 border border-slate-300 rounded-md bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="예: 문의생성, 예약확정"
+                />
+              </div>
+              <div>
+                <label className="font-bold text-slate-700 text-sm">선에 표시할 컬럼(쉼표로 구분)</label>
+                <input
+                  type="text"
+                  value={lineCols}
+                  onChange={(e) => setLineCols(e.target.value)}
+                  className="mt-2 w-full p-2 border border-slate-300 rounded-md bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="예: 이메일, 채널톡 (상담), 채널톡 (서포트봇)"
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 분석 시작 버튼 */}
