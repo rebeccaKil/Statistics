@@ -31,8 +31,10 @@ export default function Home() {
     setLoadingMessage('데이터 구조를 분석 중입니다... (1/3)');
 
     try {
-      // Python 분석 API 호출 (단일 단계 처리)
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080';
+      const isDevelopment = process.env.NODE_ENV === 'development' || 
+                           typeof window !== 'undefined' && window.location.hostname === 'localhost';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 
+                    (isDevelopment ? 'http://127.0.0.1:8080' : 'https://statistics-49nt.onrender.com');
 
       setLoadingMessage('서버에서 통계 데이터를 계산 중입니다...');
       const resp = await fetch(`${apiUrl.replace(/\/$/, '')}/analyze`, {
