@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Link as LinkIcon, CheckCircle, Loader2 } from 'lucide-react';
+import { Link as LinkIcon, CheckCircle, Loader2, X } from 'lucide-react';
 import Papa from 'papaparse';
 import { ExcelData } from '@/types';
 
@@ -93,20 +93,36 @@ export function SheetImporter({ onDataLoaded }: SheetImporterProps) {
     }
   };
 
+  const clearUrl = () => {
+    setUrl('');
+    setStatus('idle');
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-        <input
-          type="url"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          className="w-full p-3 border rounded-md"
-          placeholder="Google 스프레드시트 링크를 붙여넣으세요"
-        />
+        <div className="relative flex-1">
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            className="w-full p-3 pr-10 border border-slate-300 rounded-md bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            placeholder="Google 스프레드시트 링크를 붙여넣으세요"
+          />
+          {url && (
+            <button
+              onClick={clearUrl}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-100 rounded-full transition-colors"
+              title="링크 삭제"
+            >
+              <X className="h-5 w-5 text-slate-500 hover:text-slate-700" />
+            </button>
+          )}
+        </div>
         <button
           onClick={importSheet}
           disabled={isLoading}
-          className={`font-bold py-3 px-4 rounded-lg flex-shrink-0 flex items-center justify-center ${
+          className={`font-bold py-3 px-4 rounded-lg flex-shrink-0 flex items-center justify-center transition-colors ${
             isLoading
               ? 'bg-gray-400 text-white cursor-not-allowed'
               : 'bg-indigo-600 text-white hover:bg-indigo-700'

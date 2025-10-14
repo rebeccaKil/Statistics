@@ -10,13 +10,14 @@ interface SelectionPanelProps {
   components: InfographicComponent[];
   onRender: (selectedIndices: number[]) => void;
   onColorChange: (index: number, color: string) => void;
-  onMetaChange?: (index: number, meta: { title?: string; icon?: string }) => void;
+  onMetaChange?: (index: number, meta: { title?: string; icon?: string; chart_type?: string }) => void;
 }
 
 export function SelectionPanel({ components, onRender, onColorChange, onMetaChange }: SelectionPanelProps) {
   const [selectedItems, setSelectedItems] = useState<number[]>(
     components.map((_, index) => index)
   );
+  const [chartTypes, setChartTypes] = useState<Record<number, string>>({});
 
   // 선택 상태는 사용자가 변경한 값을 유지하도록 초기화 리셋을 제거합니다.
 
@@ -33,6 +34,13 @@ export function SelectionPanel({ components, onRender, onColorChange, onMetaChan
     onRender(selectedItems);
   };
 
+  const handleChartTypeChange = (index: number, type: string) => {
+    setChartTypes(prev => ({ ...prev, [index]: type }));
+    if (onMetaChange) {
+      onMetaChange(index, { chart_type: type });
+    }
+  };
+
   return (
     <div className="bg-white rounded-2xl shadow-lg p-4 space-y-4 max-h-96 overflow-y-auto">
       <div className="flex items-center justify-between">
@@ -46,6 +54,8 @@ export function SelectionPanel({ components, onRender, onColorChange, onMetaChan
         {components.map((component, index) => {
           const currentColor = (component as { color?: string }).color || 'indigo';
           const currentIcon = (component as { icon?: string }).icon || 'BarChart3';
+          const isCumulativeColumn = component.component_type === 'cumulative_column';
+          const currentChartType = chartTypes[index] || ((component.data as any)?.chart_type || 'bar');
           const IconPreview = getIconComponent(currentIcon);
           const colorPreview = colorOptions.find(c => c.value === currentColor)?.preview || '#6366f1';
           
@@ -72,10 +82,39 @@ export function SelectionPanel({ components, onRender, onColorChange, onMetaChan
                 )}
               </div>
 
-              {/* 아이콘과 색상 선택 - 한 줄로 배치 */}
+              {/* 누적 컬럼일 경우 막대/선 선택 추가 */}
+              {isCumulativeColumn && (
+                <div className="flex items-center space-x-2 text-xs">
+                  <span className="text-slate-600 font-medium">차트 타입:</span>
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      name={`chart-type-${index}`}
+                      value="bar"
+                      checked={currentChartType === 'bar'}
+                      onChange={() => handleChartTypeChange(index, 'bar')}
+                      className="mr-1 h-3 w-3 text-indigo-600"
+                    />
+                    <span className="text-slate-700">막대</span>
+                  </label>
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      name={`chart-type-${index}`}
+                      value="line"
+                      checked={currentChartType === 'line'}
+                      onChange={() => handleChartTypeChange(index, 'line')}
+                      className="mr-1 h-3 w-3 text-indigo-600"
+                    />
+                    <span className="text-slate-700">선</span>
+                  </label>
+                </div>
+              )}
+
+              {/* 색상 선택 - 누적 컬럼도 색상 선택 가능 */}
               <div className="flex items-center space-x-2">
-                {/* 아이콘 선택 */}
-                {onMetaChange && (
+                {/* 아이콘 선택 - 일반 컴포넌트만 */}
+                {onMetaChange && !isCumulativeColumn && (
                   <div className="flex items-center space-x-1">
                     <IconPreview className="w-3 h-3" style={{ color: colorPreview }} />
                     <select
@@ -92,10 +131,11 @@ export function SelectionPanel({ components, onRender, onColorChange, onMetaChan
                   </div>
                 )}
 
-                {/* 색상 선택 */}
+                {/* 색상 선택 - 모든 컴포넌트 */}
                 <div className="flex items-center space-x-1">
+                  <span className="text-xs text-slate-600">색상:</span>
                   <div 
-                    className="w-3 h-3 rounded" 
+                    className="w-3 h-3 rounded border border-slate-300" 
                     style={{ backgroundColor: colorPreview }}
                   />
                   <select

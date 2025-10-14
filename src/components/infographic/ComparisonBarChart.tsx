@@ -81,12 +81,26 @@ export function ComparisonBarChart({ title, icon, color, data }: ComparisonBarCh
               data: comparisonData.map(item => item.prev_count),
               backgroundColor: previousColor,
               borderRadius: 4,
+              datalabels: {
+                anchor: 'center' as const,
+                align: 'center' as const,
+                color: '#ffffff',
+                font: { size: 11, weight: 'bold' },
+                formatter: (value: number) => value > 0 ? value + '건' : ''
+              }
             },
             {
               label: currentLabel,
               data: comparisonData.map(item => item.current_count),
               backgroundColor: currentColor,
               borderRadius: 4,
+              datalabels: {
+                anchor: 'center' as const,
+                align: 'center' as const,
+                color: '#ffffff',
+                font: { size: 11, weight: 'bold' },
+                formatter: (value: number) => value > 0 ? value + '건' : ''
+              }
             }
           ]
         },
@@ -103,12 +117,7 @@ export function ComparisonBarChart({ title, icon, color, data }: ComparisonBarCh
               }
             },
             datalabels: {
-              anchor: 'end',
-              align: 'right',
-              offset: 8,
-              color: '#475569',
-              font: { weight: 'bold', size: 11 },
-              formatter: (value) => value > 0 ? value + '건' : ''
+              display: true
             },
             tooltip: {
               callbacks: {

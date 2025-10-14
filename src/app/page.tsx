@@ -15,30 +15,10 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [showSelectionPanel, setShowSelectionPanel] = useState(false);
-  const [cumulativeValueColumn, setCumulativeValueColumn] = useState<string | undefined>(undefined);
-  const [barColumns, setBarColumns] = useState<string[] | undefined>(undefined);
-  const [lineColumns, setLineColumns] = useState<string[] | undefined>(undefined);
-
-  // Gemini 제거, Python API로 대체
 
   const handleDataProcessed = (data: ExcelData[]) => {
     setExcelData(data);
   };
-  // ControlPanel에서 누적용 valueColumn을 이벤트로 전달받아 저장
-  if (typeof window !== 'undefined') {
-    window.addEventListener('cumulative:valueColumn', (e: Event) => {
-      const custom = e as CustomEvent<string>;
-      setCumulativeValueColumn(custom.detail);
-    }, { once: true });
-    window.addEventListener('cumulative:barColumns', (e: Event) => {
-      const custom = e as CustomEvent<string[]>;
-      setBarColumns(custom.detail);
-    }, { once: true });
-    window.addEventListener('cumulative:lineColumns', (e: Event) => {
-      const custom = e as CustomEvent<string[]>;
-      setLineColumns(custom.detail);
-    }, { once: true });
-  }
 
 
   // Gemini 제거됨
@@ -52,13 +32,13 @@ export default function Home() {
 
     try {
       // Python 분석 API 호출 (단일 단계 처리)
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://statistics-49nt.onrender.com';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080';
 
       setLoadingMessage('서버에서 통계 데이터를 계산 중입니다...');
       const resp = await fetch(`${apiUrl.replace(/\/$/, '')}/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows: excelData, year, month, reportType, value_column: cumulativeValueColumn, bar_columns: barColumns, line_columns: lineColumns })
+        body: JSON.stringify({ rows: excelData, year, month, reportType })
       });
       if (!resp.ok) {
         const txt = await resp.text();
@@ -87,8 +67,17 @@ export default function Home() {
     setAnalyzedComponents(prev => prev.map((c, i) => i === index ? { ...c, color } : c));
   };
 
-  const handleMetaChange = (index: number, meta: { title?: string; icon?: string }) => {
-    setAnalyzedComponents(prev => prev.map((c, i) => i === index ? { ...c, ...meta } : c));
+  const handleMetaChange = (index: number, meta: { title?: string; icon?: string; chart_type?: string }) => {
+    setAnalyzedComponents(prev => prev.map((c, i) => {
+      if (i === index) {
+        if (meta.chart_type && c.component_type === 'cumulative_column' && c.data) {
+          // chart_type 변경 시 data 내부에도 반영
+          return { ...c, ...meta, data: { ...c.data, chart_type: meta.chart_type as 'bar' | 'line' } } as InfographicComponent;
+        }
+        return { ...c, ...meta } as InfographicComponent;
+      }
+      return c;
+    }));
   };
 
   return (

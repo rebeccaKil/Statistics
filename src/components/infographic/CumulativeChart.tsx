@@ -26,29 +26,57 @@ export function CumulativeChart({ title, icon, color, data }: CumulativeChartPro
     const load = async () => {
       const Chart = (await import('chart.js/auto')).default;
       const ChartDataLabels = (await import('chartjs-plugin-datalabels')).default;
+      const { getShades } = await import('@/lib/colorUtils');
       if (chartRef.current) chartRef.current.destroy();
       const ctx = canvasRef.current!.getContext('2d')!;
 
+      // 색상 팔레트 (다양한 색상)
+      const colorPalette = ['indigo', 'blue', 'green', 'yellow', 'orange', 'red', 'pink', 'purple', 'cyan', 'teal'];
+
       const datasets = isMulti
         ? [
-            ...((data as any).bars || []).map((b: any, i: number) => ({
-              type: 'bar' as const,
-              label: b.label,
-              data: b.values,
-              backgroundColor: shades.bar400,
-              borderRadius: 4,
-              yAxisID: 'y'
-            })),
-            ...((data as any).lines || []).map((l: any, i: number) => ({
-              type: 'line' as const,
-              label: l.label,
-              data: l.values,
-              borderColor: shades.text600,
-              backgroundColor: 'transparent',
-              tension: 0.3,
-              pointRadius: 3,
-              yAxisID: 'y1'
-            }))
+            ...((data as any).bars || []).map((b: any, i: number) => {
+              const itemColor = b.color || colorPalette[i % colorPalette.length];
+              const itemShades = getShades(itemColor);
+              return {
+                type: 'bar' as const,
+                label: b.label,
+                data: b.values,
+                backgroundColor: itemShades.bar400,
+                borderRadius: 4,
+                yAxisID: 'y',
+                datalabels: {
+                  anchor: 'center' as const,
+                  align: 'center' as const,
+                  color: '#ffffff',
+                  font: { size: 11, weight: 'bold' },
+                  formatter: (v: number) => v ? v : ''
+                }
+              };
+            }),
+            ...((data as any).lines || []).map((l: any, i: number) => {
+              const itemColor = l.color || colorPalette[(((data as any).bars?.length || 0) + i) % colorPalette.length];
+              const itemShades = getShades(itemColor);
+              return {
+                type: 'line' as const,
+                label: l.label,
+                data: l.values,
+                borderColor: itemShades.text600,
+                backgroundColor: 'transparent',
+                tension: 0.3,
+                pointRadius: 4,
+                pointBackgroundColor: itemShades.text600,
+                yAxisID: 'y1',
+                datalabels: {
+                  anchor: 'end' as const,
+                  align: 'top' as const,
+                  offset: 4,
+                  color: itemShades.text600,
+                  font: { size: 11, weight: 'bold' },
+                  formatter: (v: number) => v ? v : ''
+                }
+              };
+            })
           ]
         : [
             {
@@ -58,6 +86,13 @@ export function CumulativeChart({ title, icon, color, data }: CumulativeChartPro
               backgroundColor: shades.bar400,
               borderRadius: 4,
               yAxisID: 'y',
+              datalabels: {
+                anchor: 'center' as const,
+                align: 'center' as const,
+                color: '#ffffff',
+                font: { size: 11, weight: 'bold' },
+                formatter: (v: number) => v ? v : ''
+              }
             },
             {
               type: 'line' as const,
@@ -66,8 +101,17 @@ export function CumulativeChart({ title, icon, color, data }: CumulativeChartPro
               borderColor: shades.text600,
               backgroundColor: 'transparent',
               tension: 0.3,
-              pointRadius: 3,
+              pointRadius: 4,
+              pointBackgroundColor: shades.text600,
               yAxisID: 'y1',
+              datalabels: {
+                anchor: 'end' as const,
+                align: 'top' as const,
+                offset: 4,
+                color: shades.text600,
+                font: { size: 11, weight: 'bold' },
+                formatter: (v: number) => v ? v : ''
+              }
             }
           ];
 
@@ -85,8 +129,7 @@ export function CumulativeChart({ title, icon, color, data }: CumulativeChartPro
           plugins: {
             legend: { position: 'top' },
             datalabels: {
-              anchor: 'end', align: 'top', color: '#475569', font: { size: 10, weight: 'bold' },
-              formatter: (v) => v ? v : ''
+              display: true
             }
           },
           scales: {

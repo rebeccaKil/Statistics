@@ -33,9 +33,6 @@ class AnalyzeRequest(BaseModel):
     year: int
     month: int
     reportType: str  # 'single' | 'comparison' | 'cumulative'
-    value_column: Optional[str] = None
-    bar_columns: Optional[List[str]] = None
-    line_columns: Optional[List[str]] = None
 
 
 class Component(BaseModel):
@@ -61,7 +58,7 @@ app.add_middleware(
 
 @app.get("/")
 def root():
-    return {"message": "AI Excel Analyzer API", "status": "running", "version": "cumulative-v1.0"}
+    return {"message": "AI Excel Analyzer API", "status": "running", "version": "cumulative-v1.1", "features": ["cumulative_chart"]}
 
 @app.get("/health")
 def health():
@@ -75,21 +72,35 @@ def try_parse_date(value: Any) -> Optional[datetime]:
         return value
     if isinstance(value, (int, float)):
         return None
-    s = str(value)
+    s = str(value).strip()
+    
     # 1) 완전한 일자 형식
     for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S"):
         try:
             return datetime.strptime(s[:19], fmt)
         except Exception:
             continue
-    # 2) 월/연도만 있는 형식 보강 (예: 01/2025, 01-2025, 2025-01, 2025/01, 01.2025)
+    
+    # 2) 월/일 형식 (예: 8/13, 8-13, 8.13) - 연도는 현재 연도로 가정
+    for fmt in ("%m/%d", "%m-%d", "%m.%d"):
+        try:
+            dt = datetime.strptime(s, fmt)
+            # 연도 정보가 없으므로 현재 연도로 보정
+            current_year = datetime.now().year
+            return datetime(current_year, dt.month, dt.day)
+        except Exception:
+            continue
+    
+    # 3) 월/연도만 있는 형식 (예: 01/2025, 01-2025, 2025-01, 2025/01, 01.2025)
     for fmt in ("%m/%Y", "%m-%Y", "%m.%Y", "%Y-%m", "%Y/%m"):
         try:
-            dt = datetime.strptime(s.strip(), fmt)
+            dt = datetime.strptime(s, fmt)
             # 일 정보가 없으므로 월의 1일로 보정
             return datetime(dt.year, dt.month, 1)
         except Exception:
             continue
+    
+    # 4) pandas를 이용한 유연한 파싱 시도
     try:
         return pd.to_datetime(s, errors='coerce').to_pydatetime()
     except Exception:
@@ -281,17 +292,25 @@ def extract_keywords(texts: List[str], top_n: int = 5) -> List[Dict[str, Any]]:
     merged_counts: Dict[str, int] = {}
     counts = Counter(tokens)
     
+    print(f"\n[키워드 추출] 정규화 전 토큰: {list(counts.keys())[:10]}")  # 디버깅
+    
     for token, count in counts.items():
+        # 먼저 normalize_value로 정규화 시도
+        normalized_token = normalize_value(token)
+        
+        # 기존 병합 규칙도 적용
         merged = False
         for rule in merge_rules:
             # 필수 키워드가 모두 포함되어 있는지 확인
-            if all(req in token for req in rule["required"]):
+            if all(req in normalized_token for req in rule["required"]):
                 merged_counts[rule["target"]] = merged_counts.get(rule["target"], 0) + count
                 merged = True
                 break
         
         if not merged:
-            merged_counts[token] = merged_counts.get(token, 0) + count
+            merged_counts[normalized_token] = merged_counts.get(normalized_token, 0) + count
+    
+    print(f"[키워드 추출] 정규화 후 토큰: {list(merged_counts.keys())[:10]}")  # 디버깅
     
     top = sorted(merged_counts.items(), key=lambda x: x[1], reverse=True)[:top_n]
     # 프론트 차트 포맷(name, count)
@@ -370,6 +389,56 @@ def kmeans_simple(X: np.ndarray, k: int = 5, max_iter: int = 20, seed: int = 42)
     return labels, centers
 
 
+def normalize_value(value: str) -> str:
+    """데이터 값 정규화: 유사한 표현들을 하나로 통합"""
+    if not value or pd.isna(value):
+        return value
+    
+    val = str(value).strip()
+    val_lower = val.lower().replace(" ", "")
+    
+    # 줌줌투어 관련 통합 (줌줌투어 사이트 내 여행 배너, 줌줌투어 앱 등)
+    if "줌줌투어" in val:
+        return "줌줌투어"
+    
+    # 사이트 내 이벤트 통합 (띄어쓰기 유무 통합)
+    if "사이트" in val_lower and "이벤트" in val_lower:
+        return "사이트내 이벤트"
+    
+    # 광고 관련 통합 (괄호 안 내용 제거)
+    if "광고" in val:
+        if "(" in val or "（" in val:
+            return "광고"
+        return val
+    
+    # 확정/확인 관련 문의 구분
+    if "문의" in val_lower:
+        # 1) 예약 확정 관련 (확정 여부, 확정 지연 등)
+        if "확정" in val_lower:
+            return "예약확정문의"
+        
+        # 2) 예약 확인 관련 (예약이 잘 되었는지 확인)
+        confirmation_check_keywords = [
+            "예약확인", "예약됐는지", "예약되었는지", "잘예약", "예약완료"
+        ]
+        if any(keyword in val_lower for keyword in confirmation_check_keywords):
+            return "예약확인문의"
+    
+    # 포털 검색 통합
+    if "포털" in val and "검색" in val:
+        return "포털 검색"
+    
+    # SNS 관련 통합
+    if val_lower in ["sns", "s.n.s", "에스엔에스"]:
+        return "SNS"
+    
+    # 지인추천 통합
+    if "지인" in val and "추천" in val:
+        return "지인추천"
+    
+    return val
+
+
 def month_filter(df: pd.DataFrame, date_col: Optional[str], year: int, month: int) -> pd.DataFrame:
     if not date_col or date_col not in df.columns:
         return df.iloc[0:0]
@@ -406,13 +475,28 @@ def calc_stats(df: pd.DataFrame, date_col: Optional[str], cat_cols: List[str], t
                     "count": int(count)
                 })
 
-    # distributions
+    # distributions (데이터 정규화 적용)
     distributions: Dict[str, List[Dict[str, Any]]] = {}
     for col in cat_cols:
         if col not in df.columns:
             distributions[col] = []
             continue
-        vc = df[col].astype(str).str.strip().value_counts()
+        
+        # 값 정규화 적용
+        original_values = df[col].astype(str).str.strip()
+        normalized_values = original_values.apply(normalize_value)
+        
+        # 디버깅: 정규화 전후 비교 (모든 항목 출력)
+        unique_originals = original_values.unique()
+        print(f"\n[{col}] 정규화 매핑 (총 {len(unique_originals)}개 고유값):")
+        for orig in unique_originals:
+            normalized = normalize_value(orig)
+            if orig != normalized:
+                print(f"  '{orig}' → '{normalized}'")
+            else:
+                print(f"  '{orig}' (변경없음)")
+        
+        vc = normalized_values.value_counts()
         top = vc.head(5)
         distributions[col] = [
             {"name": str(idx), "count": int(cnt)} for idx, cnt in top.items()
@@ -629,68 +713,62 @@ def analyze(req: AnalyzeRequest):
             mask = periods <= target_period
             df_cum = df.loc[mask].copy()
             df_cum['_ym'] = periods[mask].dt.strftime('%Y-%m')
-            # 수치형 후보 컬럼 찾기 (문자 포함 숫자도 변환)
-            for c in df.columns:
-                if not pd.api.types.is_numeric_dtype(df[c]):
+            
+            # 수치형 후보 컬럼 찾기 (문자 포함 숫자도 변환) - df_cum에 적용
+            for c in df_cum.columns:
+                if c == '_ym':
+                    continue
+                if not pd.api.types.is_numeric_dtype(df_cum[c]):
                     try:
-                        converted = df[c].map(to_number)
+                        converted = df_cum[c].map(to_number)
                         if converted.notnull().any():
-                            df[c] = converted
+                            df_cum[c] = converted
                     except Exception:
                         pass
-            numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
-            value_col = (req.value_column if req.value_column in df.columns else None)
-            for pref in ['문의생성', '예약확정', '이메일']:
-                if value_col is None and pref in df.columns and pd.api.types.is_numeric_dtype(df[pref]):
-                    value_col = pref
-            if value_col is None and numeric_cols:
-                value_col = numeric_cols[0]
-
-            monthly = (
-                df_cum.groupby('_ym')[value_col].sum().reset_index().sort_values('_ym')
-                if value_col else pd.DataFrame(columns=['_ym', 'val'])
-            )
-            if value_col:
-                monthly.rename(columns={value_col: 'val'}, inplace=True)
-                monthly['cum'] = monthly['val'].cumsum()
-                cum_data = [{ 'name': r['_ym'], 'count': int(r['val']), 'cumulative': int(r['cum']) } for _, r in monthly.iterrows()]
+            
+            # 전체 데이터에서 최소/최대 월 찾기
+            all_periods = periods.dropna()
+            if not all_periods.empty:
+                min_period = all_periods.min()
+                max_period = min(target_period, all_periods.max())
+                # 모든 월 범위 생성 (데이터가 없는 월도 포함)
+                all_months = pd.period_range(start=min_period, end=max_period, freq='M')
+                all_labels = [p.strftime('%Y-%m') for p in all_months]
             else:
-                cum_data = []
+                all_labels = []
 
-            # 멀티 시리즈(바/라인) 구성
-            labels = monthly['_ym'].tolist() if not monthly.empty else []
-            def build_series(cols: List[str]) -> List[Dict[str, Any]]:
-                series: List[Dict[str, Any]] = []
-                for col in cols:
-                    if col in df_cum.columns and pd.api.types.is_numeric_dtype(df_cum[col]):
-                        agg = df_cum.groupby('_ym')[col].sum().reindex(labels).fillna(0)
-                        series.append({ 'label': col, 'values': [int(v) for v in agg.tolist()] })
-                return series
-
-            bar_cols = req.bar_columns or []
-            line_cols = req.line_columns or []
-            if not bar_cols and not line_cols:
-                # 자동 배치: 숫자형 상위 2개는 바, 나머지는 라인
-                numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
-                bar_cols = numeric_cols[:2]
-                line_cols = numeric_cols[2:]
-
-            multi_payload = {
-                'labels': labels,
-                'bars': build_series(bar_cols),
-                'lines': build_series(line_cols),
-                'lineCumulative': False
-            }
-
+            # 모든 숫자형 컬럼을 개별 컴포넌트로 반환
+            numeric_cols = [c for c in df_cum.columns if c != '_ym' and pd.api.types.is_numeric_dtype(df_cum[c])]
+            
+            # 색상 팔레트 (다양한 색상 자동 할당)
+            color_palette = ['indigo', 'blue', 'green', 'yellow', 'orange', 'red', 'pink', 'purple', 'cyan', 'teal']
+            
             components = []  # type: ignore
-            components.append(Component(
-                component_type='cumulative_chart',
-                title=f'누적 리포트 - {target_year}-{target_month:02d}까지',
-                source_column=value_col or 'value',
-                icon='trending-up',
-                color='indigo',
-                data=multi_payload
-            ))
+            for idx, col in enumerate(numeric_cols):
+                # 각 컬럼별 월별 합계 계산
+                monthly_values = df_cum.groupby('_ym')[col].sum().reindex(all_labels, fill_value=0)
+                values_list = [int(float(v)) for v in monthly_values.tolist()]
+                
+                # 컬럼마다 다른 색상 자동 할당
+                assigned_color = color_palette[idx % len(color_palette)]
+                
+                components.append(Component(
+                    component_type='cumulative_column',
+                    title=col,
+                    source_column=col,
+                    icon='bar-chart',
+                    color=assigned_color,
+                    data={
+                        'column_name': col,
+                        'labels': all_labels,
+                        'values': values_list,
+                        'chart_type': 'bar'  # 기본값: 막대, 사용자가 SelectionPanel에서 변경 가능
+                    }
+                ))
+            
+            if not components:
+                return JSONResponse(status_code=400, content={"error": "숫자형 컬럼을 찾을 수 없습니다."})
+                
             return [c.dict() for c in components]
 
         if req.reportType == 'single' or not date_col:

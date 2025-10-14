@@ -112,10 +112,24 @@ export interface CumulativeChartComponent {
       }>
     | {
         labels: string[]; // YYYY-MM
-        bars: Array<{ label: string; values: number[] }>;
-        lines: Array<{ label: string; values: number[] }>;
+        bars: Array<{ label: string; values: number[]; color?: string }>;
+        lines: Array<{ label: string; values: number[]; color?: string }>;
         lineCumulative?: boolean;
       };
+}
+
+export interface CumulativeColumnComponent {
+  component_type: 'cumulative_column';
+  title: string;
+  source_column: string;
+  icon: string;
+  color: string;
+  data: {
+    column_name: string;
+    labels: string[]; // YYYY-MM
+    values: number[];
+    chart_type: 'bar' | 'line';
+  };
 }
 
 export type InfographicComponent = 
@@ -125,7 +139,8 @@ export type InfographicComponent =
   | ComparisonBarChartComponent
   | DailyBreakdownComponent
   | SummaryComponent
-  | CumulativeChartComponent;
+  | CumulativeChartComponent
+  | CumulativeColumnComponent;
 
 export interface MonthStats {
   total_count: number;
