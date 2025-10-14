@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Image as ImageIcon } from 'lucide-react';
-import { InfographicComponent } from '@/types';
+import { InfographicComponent, isCumulativeColumnComponent } from '@/types';
 import { colorOptions } from '@/lib/colorUtils';
 import { iconOptions, getIconComponent } from '@/lib/iconUtils';
 
@@ -52,10 +52,10 @@ export function SelectionPanel({ components, onRender, onColorChange, onMetaChan
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {components.map((component, index) => {
-          const currentColor = (component as { color?: string }).color || 'indigo';
-          const currentIcon = (component as { icon?: string }).icon || 'BarChart3';
-          const isCumulativeColumn = component.component_type === 'cumulative_column';
-          const currentChartType = chartTypes[index] || ((component.data as any)?.chart_type || 'bar');
+          const currentColor = component.color || 'indigo';
+          const currentIcon = component.icon || 'BarChart3';
+          const isColumnComponent = isCumulativeColumnComponent(component);
+          const currentChartType = chartTypes[index] || (isColumnComponent ? component.data.chart_type : 'bar');
           const IconPreview = getIconComponent(currentIcon);
           const colorPreview = colorOptions.find(c => c.value === currentColor)?.preview || '#6366f1';
           
@@ -72,7 +72,7 @@ export function SelectionPanel({ components, onRender, onColorChange, onMetaChan
                 {onMetaChange ? (
                   <input
                     type="text"
-                    value={(component as { title?: string }).title || ''}
+                    value={component.title || ''}
                     onChange={(e) => onMetaChange(index, { title: e.target.value })}
                     className="flex-1 text-sm font-medium p-1 border rounded bg-white text-slate-700 border-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                     placeholder="제목"
@@ -83,7 +83,7 @@ export function SelectionPanel({ components, onRender, onColorChange, onMetaChan
               </div>
 
               {/* 누적 컬럼일 경우 막대/선 선택 추가 */}
-              {isCumulativeColumn && (
+              {isColumnComponent && (
                 <div className="flex items-center space-x-2 text-xs">
                   <span className="text-slate-600 font-medium">차트 타입:</span>
                   <label className="flex items-center cursor-pointer">
@@ -114,7 +114,7 @@ export function SelectionPanel({ components, onRender, onColorChange, onMetaChan
               {/* 색상 선택 - 누적 컬럼도 색상 선택 가능 */}
               <div className="flex items-center space-x-2">
                 {/* 아이콘 선택 - 일반 컴포넌트만 */}
-                {onMetaChange && !isCumulativeColumn && (
+                {onMetaChange && !isColumnComponent && (
                   <div className="flex items-center space-x-1">
                     <IconPreview className="w-3 h-3" style={{ color: colorPreview }} />
                     <select

@@ -3,23 +3,26 @@
 import { useEffect, useRef } from 'react';
 import { getIconComponent } from '@/lib/iconUtils';
 import { getShades } from '@/lib/colorUtils';
+import { CumulativeData, hasMultipleDatasets } from '@/types';
 
 interface CumulativeChartProps {
   title: string;
   icon: string;
   color: string;
-  data:
-    | Array<{ name: string; count: number; cumulative: number }>
-    | { labels: string[]; bars: Array<{ label: string; values: number[] }>; lines: Array<{ label: string; values: number[] }>; lineCumulative?: boolean };
+  data: CumulativeData;
 }
+
+type ChartInstance = {
+  destroy: () => void;
+};
 
 export function CumulativeChart({ title, icon, color, data }: CumulativeChartProps) {
   const IconComponent = getIconComponent(icon);
   const shades = getShades(color);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const chartRef = useRef<{ destroy: () => void } | null>(null);
+  const chartRef = useRef<ChartInstance | null>(null);
 
-  const isMulti = !!(data as any)?.labels;
+  const isMulti = hasMultipleDatasets(data);
 
   useEffect(() => {
     if (!canvasRef.current || !data) return;
@@ -35,7 +38,7 @@ export function CumulativeChart({ title, icon, color, data }: CumulativeChartPro
 
       const datasets = isMulti
         ? [
-            ...((data as any).bars || []).map((b: any, i: number) => {
+            ...(data.bars || []).map((b, i) => {
               const itemColor = b.color || colorPalette[i % colorPalette.length];
               const itemShades = getShades(itemColor);
               return {
@@ -49,13 +52,13 @@ export function CumulativeChart({ title, icon, color, data }: CumulativeChartPro
                   anchor: 'center' as const,
                   align: 'center' as const,
                   color: '#ffffff',
-                  font: { size: 11, weight: 'bold' },
+                  font: { size: 11, weight: 'bold' as const },
                   formatter: (v: number) => v ? v : ''
                 }
               };
             }),
-            ...((data as any).lines || []).map((l: any, i: number) => {
-              const itemColor = l.color || colorPalette[(((data as any).bars?.length || 0) + i) % colorPalette.length];
+            ...(data.lines || []).map((l, i) => {
+              const itemColor = l.color || colorPalette[((data.bars?.length || 0) + i) % colorPalette.length];
               const itemShades = getShades(itemColor);
               return {
                 type: 'line' as const,
@@ -72,7 +75,7 @@ export function CumulativeChart({ title, icon, color, data }: CumulativeChartPro
                   align: 'top' as const,
                   offset: 4,
                   color: itemShades.text600,
-                  font: { size: 11, weight: 'bold' },
+                  font: { size: 11, weight: 'bold' as const },
                   formatter: (v: number) => v ? v : ''
                 }
               };
@@ -82,7 +85,7 @@ export function CumulativeChart({ title, icon, color, data }: CumulativeChartPro
             {
               type: 'bar' as const,
               label: '월별 값',
-              data: (data as any).map((d: any) => d.count),
+              data: data.map(d => d.count),
               backgroundColor: shades.bar400,
               borderRadius: 4,
               yAxisID: 'y',
@@ -90,14 +93,14 @@ export function CumulativeChart({ title, icon, color, data }: CumulativeChartPro
                 anchor: 'center' as const,
                 align: 'center' as const,
                 color: '#ffffff',
-                font: { size: 11, weight: 'bold' },
+                font: { size: 11, weight: 'bold' as const },
                 formatter: (v: number) => v ? v : ''
               }
             },
             {
               type: 'line' as const,
               label: '누적 합계',
-              data: (data as any).map((d: any) => d.cumulative),
+              data: data.map(d => d.cumulative),
               borderColor: shades.text600,
               backgroundColor: 'transparent',
               tension: 0.3,
@@ -109,7 +112,7 @@ export function CumulativeChart({ title, icon, color, data }: CumulativeChartPro
                 align: 'top' as const,
                 offset: 4,
                 color: shades.text600,
-                font: { size: 11, weight: 'bold' },
+                font: { size: 11, weight: 'bold' as const },
                 formatter: (v: number) => v ? v : ''
               }
             }
@@ -119,7 +122,7 @@ export function CumulativeChart({ title, icon, color, data }: CumulativeChartPro
         type: 'bar',
         plugins: [ChartDataLabels],
         data: {
-          labels: isMulti ? (data as any).labels : (data as any).map((d: any) => d.name),
+          labels: isMulti ? data.labels : data.map(d => d.name),
           datasets
         },
         options: {
@@ -137,13 +140,13 @@ export function CumulativeChart({ title, icon, color, data }: CumulativeChartPro
             y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false } }
           }
         }
-      });
+      }) as ChartInstance;
     };
     load();
     return () => { if (chartRef.current) chartRef.current.destroy(); };
-  }, [data, color, isMulti]);
+  }, [data, isMulti, shades.bar400, shades.text600]);
 
-  if (!data || (!isMulti && (data as any).length === 0)) {
+  if (!data || (!isMulti && data.length === 0)) {
     return (
       <section className="bg-white rounded-2xl shadow-lg p-6">
         <div className="flex items-center mb-4">

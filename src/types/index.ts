@@ -142,6 +142,18 @@ export type InfographicComponent =
   | CumulativeChartComponent
   | CumulativeColumnComponent;
 
+export type CumulativeData = 
+  | Array<{ name: string; count: number; cumulative: number }>
+  | { labels: string[]; bars: Array<{ label: string; values: number[]; color?: string }>; lines: Array<{ label: string; values: number[]; color?: string }>; lineCumulative?: boolean };
+
+export function isCumulativeColumnComponent(component: InfographicComponent): component is CumulativeColumnComponent {
+  return component.component_type === 'cumulative_column';
+}
+
+export function hasMultipleDatasets(data: CumulativeData): data is { labels: string[]; bars: Array<{ label: string; values: number[]; color?: string }>; lines: Array<{ label: string; values: number[]; color?: string }>; lineCumulative?: boolean } {
+  return !Array.isArray(data) && 'labels' in data;
+}
+
 export interface MonthStats {
   total_count: number;
   peak_day: {

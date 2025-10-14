@@ -8,7 +8,7 @@ import { ComparisonBarChart } from './infographic/ComparisonBarChart';
 import { DailyBreakdown } from './infographic/DailyBreakdown';
 import { Summary } from './infographic/Summary';
 import { CumulativeChart } from './infographic/CumulativeChart';
-import { InfographicComponent } from '@/types';
+import { InfographicComponent, CumulativeChartComponent, isCumulativeColumnComponent } from '@/types';
 
 interface ResultSectionProps {
   isLoading: boolean;
@@ -46,32 +46,37 @@ export function ResultSection({ isLoading, loadingMessage, components }: ResultS
     !['kpi', 'comparison_kpi', 'cumulative_column'].includes(comp.component_type)
   );
 
-  // 누적 컬럼들을 하나의 CumulativeChart로 통합
-  const cumulativeChart = cumulativeColumns.length > 0 ? {
+  const cumulativeChart: CumulativeChartComponent | null = cumulativeColumns.length > 0 ? {
     component_type: 'cumulative_chart',
     title: '누적 리포트',
     icon: 'trending-up',
     color: 'indigo',
     source_column: 'cumulative',
     data: {
-      labels: (cumulativeColumns[0].data as any)?.labels || [],
+      labels: isCumulativeColumnComponent(cumulativeColumns[0]) ? cumulativeColumns[0].data.labels : [],
       bars: cumulativeColumns
-        .filter(c => (c.data as any)?.chart_type === 'bar')
-        .map(c => ({
-          label: c.title,
-          values: (c.data as any)?.values || [],
-          color: c.color || 'indigo'
-        })),
+        .filter(c => isCumulativeColumnComponent(c) && c.data.chart_type === 'bar')
+        .map(c => {
+          if (!isCumulativeColumnComponent(c)) return { label: '', values: [], color: 'indigo' };
+          return {
+            label: c.title,
+            values: c.data.values,
+            color: c.color || 'indigo'
+          };
+        }),
       lines: cumulativeColumns
-        .filter(c => (c.data as any)?.chart_type === 'line')
-        .map(c => ({
-          label: c.title,
-          values: (c.data as any)?.values || [],
-          color: c.color || 'indigo'
-        })),
+        .filter(c => isCumulativeColumnComponent(c) && c.data.chart_type === 'line')
+        .map(c => {
+          if (!isCumulativeColumnComponent(c)) return { label: '', values: [], color: 'indigo' };
+          return {
+            label: c.title,
+            values: c.data.values,
+            color: c.color || 'indigo'
+          };
+        }),
       lineCumulative: false
     }
-  } as InfographicComponent : null;
+  } : null;
 
   return (
     <div className="space-y-6">
