@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { getIconComponent } from '@/lib/iconUtils';
-import { getShades } from '@/lib/colorUtils';
+import { getShades, toRgba } from '@/lib/colorUtils';
 
 interface ComparisonBarChartProps {
   title: string;
@@ -41,6 +41,10 @@ export function ComparisonBarChart({ title, icon, color, data }: ComparisonBarCh
     previous_label?: string;
     current_color?: string;
     previous_color?: string;
+    others?: {
+      current?: Array<{ name: string; count: number }>;
+      previous?: Array<{ name: string; count: number }>;
+    }
   };
   
   const comparisonData = isNewFormat ? (data as NewDataFormat).comparison : (data as ComparisonItem[]);
@@ -49,7 +53,8 @@ export function ComparisonBarChart({ title, icon, color, data }: ComparisonBarCh
   // 색상은 항상 컴포넌트의 color 팔레트에서 파생 (아이콘과 동일 기준)
   // 백엔드가 내려준 색상 힌트가 있더라도, 사용자가 카드 색을 바꾸면 그 팔레트로 즉시 반영되어야 함
   const currentColor = shades.text500;   // 진한 색 (현재월)
-  const previousColor = shades.bar400;   // 연한 색 (이전월)
+  // 이전월은 한 단계 더 연하게: 기존 연톤(bar400)을 70% 투명도로 처리
+  const previousColor = toRgba(shades.bar400, 0.7);
 
   useEffect(() => {
     if (!canvasRef.current || !comparisonData || comparisonData.length === 0) return;
@@ -179,6 +184,10 @@ export function ComparisonBarChart({ title, icon, color, data }: ComparisonBarCh
   // 차트 높이 동적 계산 (항목당 60px + 여백)
   const chartHeight = Math.max(300, comparisonData.length * 60 + 80);
 
+  const others = isNewFormat ? (data as NewDataFormat).others : undefined;
+  // 그래프 데이터에 '기타' 막대가 있을 때만 하단 노출. (현재 정책상 기타 막대는 생성하지 않으므로 기본적으로 숨김)
+  const hasOthersBar = comparisonData?.some(item => item.name === '기타' && (item.current_count > 0 || item.prev_count > 0));
+
   return (
     <section className="bg-white rounded-2xl shadow-lg p-6">
       <div className="flex items-center mb-6">
@@ -191,6 +200,29 @@ export function ComparisonBarChart({ title, icon, color, data }: ComparisonBarCh
       <div style={{ height: `${chartHeight}px` }}>
         <canvas ref={canvasRef}></canvas>
       </div>
+
+      {/* 기타 항목 표기 */}
+      {hasOthersBar && others && (others.current?.length || others.previous?.length) ? (
+        <div className="mt-4 text-sm text-slate-600">
+          <div className="font-semibold mb-1">기타 항목</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div>
+              <span className="font-medium mr-2" style={{ color: currentColor }}>{currentLabel}</span>
+              {(others.current || []).map((i, idx) => (
+                <span key={idx} className="mr-3">{i.name}: {i.count}건</span>
+              ))}
+              {(!others.current || others.current.length === 0) && (<span>없음</span>)}
+            </div>
+            <div>
+              <span className="font-medium mr-2" style={{ color: previousColor }}>{previousLabel}</span>
+              {(others.previous || []).map((i, idx) => (
+                <span key={idx} className="mr-3">{i.name}: {i.count}건</span>
+              ))}
+              {(!others.previous || others.previous.length === 0) && (<span>없음</span>)}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

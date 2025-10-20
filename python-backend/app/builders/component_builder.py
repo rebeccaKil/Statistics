@@ -253,12 +253,12 @@ def build_components_comparison(
         # 현재/이전 월의 카테고리 분포 데이터
         current_list = curr.get("distributions", {}).get(col, [])
         prev_list = prev.get("distributions", {}).get(col, [])
+        current_others = curr.get("distributions_others", {}).get(col, [])
+        prev_others = prev.get("distributions_others", {}).get(col, [])
         
-        # 모든 카테고리 이름 수집 (현재 + 이전)
-        names = sorted(set(
-            [i["name"] for i in current_list] + 
-            [i["name"] for i in prev_list]
-        ))
+        # 기준월(현재월) 상위 항목 순서를 그대로 사용
+        # 이유: 비교 그래프는 기준월을 기준으로 내림차순 정렬되어야 함
+        names = [i["name"] for i in current_list]
         
         # 카테고리별 개수 맵 생성
         current_map = {i["name"]: i["count"] for i in current_list}
@@ -267,12 +267,14 @@ def build_components_comparison(
         # 비교 데이터 생성
         comparison = [
             {
-                "name": n, 
-                "current_count": int(current_map.get(n, 0)), 
-                "prev_count": int(prev_map.get(n, 0))
-            } 
+                "name": n,
+                "current_count": int(current_map.get(n, 0)),
+                "prev_count": int(prev_map.get(n, 0)),
+            }
             for n in names
         ]
+
+        # 기타 막대는 생성하지 않음 (요청 사항: 그래프에 '기타'는 인위적으로 추가하지 않음)
         
         components.append(Component(
             component_type='comparison_bar_chart',
@@ -287,6 +289,10 @@ def build_components_comparison(
                 # 색상 힌트를 함께 전달 (프론트에서 기본값으로 사용)
                 "current_color": "#0ea5e9",   # sky.text500
                 "previous_color": "#38bdf8",  # sky.bar400
+                "others": {
+                    "current": current_others,
+                    "previous": prev_others,
+                }
             }
         ))
     

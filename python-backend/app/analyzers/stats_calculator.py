@@ -189,6 +189,7 @@ def calc_stats(
     # 3. 카테고리별 분포
     # ========================================
     distributions: Dict[str, List[Dict[str, Any]]] = {}
+    distributions_others: Dict[str, List[Dict[str, Any]]] = {}
     
     for col in cat_cols:
         # 컬럼이 존재하지 않으면 빈 리스트
@@ -206,13 +207,18 @@ def calc_stats(
             # 값별 개수 집계
             vc = normalized_values.value_counts()
             
-            # 상위 N개만 추출
+            # 상위 N개 및 기타 계산
             top = vc.head(max_category_items)
+            others = vc.iloc[max_category_items:]
             
             # 리스트 형태로 변환
             distributions[col] = [
                 {"name": str(idx), "count": int(cnt)} 
                 for idx, cnt in top.items()
+            ]
+            distributions_others[col] = [
+                {"name": str(idx), "count": int(cnt)}
+                for idx, cnt in others.items()
             ]
         except Exception:
             # 집계 실패 시 빈 리스트
@@ -250,5 +256,6 @@ def calc_stats(
         "distributions": distributions,
         "daily_list": daily_list,
         "summary_items": summary_items,
+        "distributions_others": distributions_others,
     }
 
