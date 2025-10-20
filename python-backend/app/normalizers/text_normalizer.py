@@ -1,4 +1,5 @@
 import pandas as pd
+import re
 from typing import Dict, List, Tuple, Optional
 
 
@@ -10,6 +11,9 @@ from typing import Dict, List, Tuple, Optional
 # 예: "sns", "s.n.s", "에스엔에스" -> "SNS"
 EXACT_MATCH_RULES: Dict[str, List[str]] = {
     "SNS": ["sns", "s.n.s", "에스엔에스"],
+    # 공백 무시 통합 (대표 표기 선택)
+    "가능여부": ["가능여부", "가능 여부"],
+    "환불여부": ["환불여부", "환불 여부"],
 }
 
 # 2. 키워드 조합 규칙: 여러 키워드가 모두 포함된 경우 통합
@@ -18,6 +22,8 @@ KEYWORD_COMBINATION_RULES: List[Tuple[Tuple[str, ...], str]] = [
     (("사이트", "이벤트"), "사이트내 이벤트"),
     (("포털", "검색"), "포털 검색"),
     (("지인", "추천"), "지인추천"),
+    # 공백 유무 관계없이 동일 처리
+    (("확정", "여부"), "예약확정문의"),
 ]
 
 # 3. 우선순위 키워드 규칙: 특정 키워드가 포함되면 우선 처리
@@ -81,25 +87,27 @@ def normalize_value(value: str, use_custom_rules: bool = True) -> str:
     if not value or pd.isna(value):
         return value
     
-    # 기본 정규화: 문자열 변환 및 공백 제거
+    # 기본 정규화: 문자열 변환 및 양끝 공백 제거
     val = str(value).strip()
     
     # 빈 문자열이면 그대로 반환
     if not val:
         return val
     
-    # 도메인 특화 규칙을 사용하지 않으면 기본 정규화만 반환
+    # 도메인 특화 규칙을 사용하지 않으면 공백 제거만 수행 후 반환
     if not use_custom_rules:
-        return val
+        # 모든 공백(스페이스 포함)을 제거해 표기 차이 통합
+        return re.sub(r"\s+", "", val)
     
-    # 비교용 소문자+공백제거 버전
-    val_lower = val.lower().replace(" ", "")
+    # 비교용: 소문자 + 모든 공백 제거 버전
+    val_no_space = re.sub(r"\s+", "", val)
+    val_lower = val_no_space.lower()
     
     # ========================================
     # 1. 완전 일치 규칙 적용
     # ========================================
     for normalized, variants in EXACT_MATCH_RULES.items():
-        if val_lower in [v.lower().replace(" ", "") for v in variants]:
+        if val_lower in [re.sub(r"\s+", "", v).lower() for v in variants]:
             return normalized
     
     # ========================================
@@ -124,7 +132,7 @@ def normalize_value(value: str, use_custom_rules: bool = True) -> str:
     # 4. 단일 키워드 규칙 적용
     # ========================================
     for keyword, result in SINGLE_KEYWORD_RULES.items():
-        if keyword in val:  # 대소문자 구분 (한글은 보통 구분 필요 없음)
+        if keyword in val_no_space:  # 공백 무시 포함 체크
             return result
     
     # ========================================
@@ -136,8 +144,8 @@ def normalize_value(value: str, use_custom_rules: bool = True) -> str:
             if "(" in val or "（" in val:
                 return keyword
     
-    # 어떤 규칙에도 해당하지 않으면 원본 반환
-    return val
+    # 어떤 규칙에도 해당하지 않으면 공백을 제거한 값 반환(표기 통합)
+    return val_no_space
 
 
 def add_normalization_rule(

@@ -46,8 +46,10 @@ export function ComparisonBarChart({ title, icon, color, data }: ComparisonBarCh
   const comparisonData = isNewFormat ? (data as NewDataFormat).comparison : (data as ComparisonItem[]);
   const currentLabel = isNewFormat ? (data as NewDataFormat).current_label || '현재월' : '현재월';
   const previousLabel = isNewFormat ? (data as NewDataFormat).previous_label || '이전월' : '이전월';
-  const currentColor = isNewFormat ? (data as NewDataFormat).current_color || '#6366f1' : '#6366f1';
-  const previousColor = isNewFormat ? (data as NewDataFormat).previous_color || '#a78bfa' : '#a78bfa';
+  // 색상은 항상 컴포넌트의 color 팔레트에서 파생 (아이콘과 동일 기준)
+  // 백엔드가 내려준 색상 힌트가 있더라도, 사용자가 카드 색을 바꾸면 그 팔레트로 즉시 반영되어야 함
+  const currentColor = shades.text500;   // 진한 색 (현재월)
+  const previousColor = shades.bar400;   // 연한 색 (이전월)
 
   useEffect(() => {
     if (!canvasRef.current || !comparisonData || comparisonData.length === 0) return;
@@ -158,7 +160,7 @@ export function ComparisonBarChart({ title, icon, color, data }: ComparisonBarCh
         chartRef.current.destroy();
       }
     };
-  }, [comparisonData, currentLabel, previousLabel, currentColor, previousColor]);
+  }, [comparisonData, currentLabel, previousLabel, currentColor, previousColor, color]);
 
   if (!comparisonData || comparisonData.length === 0) {
     return (

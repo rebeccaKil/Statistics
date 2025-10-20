@@ -33,6 +33,18 @@ export interface BarChartComponent {
   }>;
 }
 
+export interface MonthlyDistributionComponent {
+  component_type: 'monthly_distribution';
+  title: string;
+  source_column: string;
+  icon: string;
+  color: string;
+  data: Array<{
+    name: string; // "n월"
+    count: number;
+  }>;
+}
+
 export interface ComparisonKPIComponent {
   component_type: 'comparison_kpi';
   title: string;
@@ -140,7 +152,8 @@ export type InfographicComponent =
   | DailyBreakdownComponent
   | SummaryComponent
   | CumulativeChartComponent
-  | CumulativeColumnComponent;
+  | CumulativeColumnComponent
+  | MonthlyDistributionComponent;
 
 export type CumulativeData = 
   | Array<{ name: string; count: number; cumulative: number }>

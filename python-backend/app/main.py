@@ -21,6 +21,7 @@ from .utils.number_utils import to_number
 from .analyzers import detect_columns, extract_keywords, calc_stats
 from .analyzers.stats_calculator import month_filter
 from .builders import build_components_single, build_components_comparison
+from .builders.component_builder import build_monthly_distribution
 
 # FastAPI 애플리케이션 초기화
 app = FastAPI(
@@ -170,14 +171,30 @@ def analyze(req: AnalyzeRequest):
 
         # 6-2. 단일 월 리포트 (날짜 컬럼 없으면 자동으로 이 타입)
         if req.reportType == 'single' or not date_col:
-            return _build_single_report(current_stats, cat_cols, current_df, text_col, target_month)
+            comps = _build_single_report(current_stats, cat_cols, current_df, text_col, target_month)
+            # 여행일/여행일자 컬럼이 있는 경우 월별 분포 추가
+            for travel_col_candidate in ['여행일', '여행일자']:
+                if travel_col_candidate in df.columns:
+                    monthly = build_monthly_distribution(df, travel_col_candidate)
+                    if monthly is not None:
+                        comps.append(monthly.dict())
+                        break
+            return comps
 
         # 6-3. 전월 비교 리포트
-        return _build_comparison_report(
+        comps = _build_comparison_report(
             df, date_col, cat_cols, text_col,
             current_stats, current_df,
             target_year, target_month
         )
+        # 여행일/여행일자 월별 분포 추가 (비교 리포트에도 함께 노출)
+        for travel_col_candidate in ['여행일', '여행일자']:
+            if travel_col_candidate in df.columns:
+                monthly = build_monthly_distribution(df, travel_col_candidate)
+                if monthly is not None:
+                    comps.append(monthly.dict())
+                    break
+        return comps
 
     except Exception as e:
         # 오류 발생 시 400 응답

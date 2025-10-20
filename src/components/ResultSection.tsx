@@ -114,6 +114,8 @@ function renderComponent(component: InfographicComponent) {
       return <KPICard {...component} />;
     case 'bar_chart':
       return <BarChart {...component} />;
+    case 'monthly_distribution':
+      return <BarChart {...component} />;
     case 'comparison_kpi':
       return <ComparisonKPI {...component} />;
     case 'comparison_bar_chart':

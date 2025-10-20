@@ -1,5 +1,7 @@
 from typing import Dict, Any, List, Optional
 from ..models import Component
+import pandas as pd
+from ..utils.date_utils import try_parse_date
 
 
 # ============================================================
@@ -282,8 +284,60 @@ def build_components_comparison(
                 "comparison": comparison,
                 "current_label": f"{curr_month}월",
                 "previous_label": f"{prev_month}월",
+                # 색상 힌트를 함께 전달 (프론트에서 기본값으로 사용)
+                "current_color": "#0ea5e9",   # sky.text500
+                "previous_color": "#38bdf8",  # sky.bar400
             }
         ))
     
     return components
 
+
+def build_monthly_distribution(
+    df: pd.DataFrame,
+    travel_date_col: str,
+    title: str = '월별 여행일자 분포',
+    top_n: int = 12
+) -> Optional[Component]:
+    """
+    여행일/여행일자 컬럼 기반 월별 분포 컴포넌트를 생성합니다.
+
+    Args:
+        df: 전체 데이터프레임
+        travel_date_col: 여행일/여행일자 컬럼 이름
+        title: 컴포넌트 제목
+        top_n: 표시할 월 개수 (기본 12)
+
+    Returns:
+        Component 또는 None (유효한 데이터 없을 때)
+    """
+    if travel_date_col not in df.columns:
+        return None
+
+    try:
+        parsed = df[travel_date_col].apply(try_parse_date).dropna()
+        if parsed.empty:
+            return None
+
+        # 월(1~12) 기준으로 합산 (연도 무시, 전체 월 분포)
+        month_counts = parsed.dt.month.value_counts().sort_values(ascending=False)
+        if month_counts.empty:
+            return None
+
+        # 상위 N개만 사용하되, 일반적으로 12개월 모두 노출
+        month_counts = month_counts.head(top_n)
+        items = [
+            {"name": f"{int(m)}월", "count": int(c)}
+            for m, c in month_counts.items()
+        ]
+
+        return Component(
+            component_type='monthly_distribution',
+            title=title,
+            source_column=travel_date_col,
+            icon='calendar',
+            color='orange',
+            data=items
+        )
+    except Exception:
+        return None
