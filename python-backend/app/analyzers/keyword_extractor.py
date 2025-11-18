@@ -82,7 +82,79 @@ MERGE_RULES: List[Dict[str, Any]] = [
         "required": ["결제"],
         "optional": ["오류", "환불", "카드", "수수료", "쿠폰", "마일리지", "에러"]
     },
+    {
+        "target": "마케팅 수신거부 미준수",
+        "required": ["마케팅", "수신거부"],  # "마케팅"과 "수신거부" 모두 필수 (더 구체적으로 매칭)
+        "optional": ["수신", "거부", "알림", "메일", "푸시", "받음", "했으나", "미준수"]
+    },
+    {
+        "target": "예약 확인 불가",
+        "required": ["예약", "확인"],
+        "optional": ["불가", "안됨", "안된다", "확인불가", "예약건", "예약내역", "결제", "완료", "했으나", "안된다고"]
+    },
 ]
+
+
+def _split_long_token(token: str) -> str:
+    """
+    긴 토큰을 의미 단위로 분리하여 띄어쓰기 추가
+    
+    예:
+        "쿠폰적용불가문의" -> "쿠폰 적용 불가 문의"
+        "채팅서버연결중으로채팅불가" -> "채팅 서버 연결 중으로 채팅 불가"
+    
+    Args:
+        token: 분리할 토큰
+    
+    Returns:
+        띄어쓰기가 추가된 토큰
+    """
+    if len(token) <= 2:
+        return token
+    
+    # 일반적인 한국어 단어 패턴으로 분리 시도
+    # 2-3글자 단위로 분리하되, 의미 있는 단어 경계 찾기
+    import re
+    
+    # 한글 단어 패턴: 2-4글자 단위로 분리
+    # 예: "쿠폰적용불가문의" -> ["쿠폰", "적용", "불가", "문의"]
+    parts = []
+    i = 0
+    
+    while i < len(token):
+        # 2-3글자 단위로 분리 시도
+        if i + 3 <= len(token):
+            # 3글자 단위로 분리
+            parts.append(token[i:i+3])
+            i += 3
+        elif i + 2 <= len(token):
+            # 2글자 단위로 분리
+            parts.append(token[i:i+2])
+            i += 2
+        else:
+            # 남은 1글자
+            if parts:
+                parts[-1] += token[i]
+            else:
+                parts.append(token[i])
+            i += 1
+    
+    # 결과가 너무 많으면 2글자씩으로 재분리
+    if len(parts) > 6:
+        parts = []
+        i = 0
+        while i < len(token):
+            if i + 2 <= len(token):
+                parts.append(token[i:i+2])
+                i += 2
+            else:
+                if parts:
+                    parts[-1] += token[i]
+                else:
+                    parts.append(token[i])
+                i += 1
+    
+    return " ".join(parts)
 
 
 def tokenize_ko(
@@ -199,6 +271,9 @@ def extract_keywords(
     # ========================================
     # 1. 토큰화 및 결합
     # ========================================
+    # 원본 텍스트와 키워드 매핑을 저장 (띄어쓰기 보존용)
+    # 키: 정규화된 키워드(공백 제거), 값: 원본 텍스트에서 추출한 키워드(띄어쓰기 포함)
+    original_keyword_map: Dict[str, str] = {}
     tokens: List[str] = []
     
     for t in texts:
@@ -206,13 +281,182 @@ def extract_keywords(
         if not t:
             continue
         
-        # 공백 제거 및 토큰화
-        s = str(t).replace(" ", "")
-        toks = tokenize_ko(s)
+        # 원본 텍스트 유지 (결과 표시용)
+        original_text = str(t).strip()
+        
+        # 원본에 띄어쓰기가 있는지 확인
+        has_original_spaces = " " in original_text
+        
+        # 분석 시에는 띄어쓰기 제거 (일관된 분석을 위해)
+        # "마케팅 수신거부"와 "마케팅수신거부"를 동일하게 처리
+        text_for_analysis = original_text.replace(" ", "")
+        
+        # ========================================
+        # 0. 병합 규칙에 해당하는 키워드 먼저 추출
+        # ========================================
+        # 원본 텍스트에서 병합 규칙에 해당하는 키워드를 먼저 찾아서 추출
+        # 더 구체적인 규칙을 먼저 체크하기 위해 우선순위 정렬
+        matched_merge_keyword = None
+        text_lower = text_for_analysis.lower()
+        
+        # 우선순위: 필수 키워드가 많은 규칙을 먼저 체크 (더 구체적인 규칙 우선)
+        sorted_rules = sorted(merge_rules, key=lambda r: (-len(r["required"]), r["target"]))
+        
+        for rule in sorted_rules:
+            # 특수 케이스: "마케팅 수신거부 미준수" (required에 "수신거부"가 있지만 "수신"과 "거부"로 분리될 수 있음)
+            if rule["target"] == "마케팅 수신거부 미준수":
+                has_marketing = "마케팅" in text_lower
+                has_susin_geobu = "수신거부" in text_lower
+                has_susin = "수신" in text_lower
+                has_geobu = "거부" in text_lower
+                
+                # "마케팅"과 ("수신거부" 또는 ("수신"과 "거부"))가 모두 있어야 함
+                if has_marketing and (has_susin_geobu or (has_susin and has_geobu)):
+                    # 원본 텍스트에 "미준수"가 포함되어 있는지 확인
+                    has_mijunsu = "미준수" in text_lower or "미준" in text_lower
+                    
+                    # 원본 텍스트에서 "마케팅 수신거부" 부분 추출
+                    if has_original_spaces:
+                        # 원본에서 "마케팅"과 "수신거부" 관련 부분 찾기
+                        original_words = original_text.split()
+                        matched_words = []
+                        found_marketing = False
+                        found_susin_geobu = False
+                        found_mijunsu_word = False
+                        
+                        for word in original_words:
+                            word_lower = word.lower().replace(" ", "")
+                            if "마케팅" in word_lower and not found_marketing:
+                                matched_words.append(word)
+                                found_marketing = True
+                            elif ("수신거부" in word_lower or ("수신" in word_lower and "거부" in word_lower)) and not found_susin_geobu:
+                                matched_words.append(word)
+                                found_susin_geobu = True
+                            elif ("미준수" in word_lower or "미준" in word_lower) and not found_mijunsu_word:
+                                matched_words.append(word)
+                                found_mijunsu_word = True
+                            
+                            if found_marketing and found_susin_geobu:
+                                # "미준수"가 있으면 계속 찾고, 없으면 중단
+                                if not has_mijunsu:
+                                    break
+                                elif found_mijunsu_word:
+                                    break
+                        
+                        if matched_words and found_marketing and found_susin_geobu:
+                            extracted_keyword = " ".join(matched_words)
+                            # "미준수"가 포함되어 있지 않으면 rule["target"] 사용
+                            if not has_mijunsu:
+                                matched_merge_keyword = rule["target"]
+                            else:
+                                matched_merge_keyword = extracted_keyword
+                        else:
+                            # 단어 단위로 찾지 못했으면 원본 텍스트에서 직접 찾기
+                            # "마케팅"과 "수신거부"가 포함된 연속된 부분 추출
+                            original_lower = original_text.lower()
+                            marketing_idx = original_lower.find("마케팅")
+                            extracted_keyword = None
+                            
+                            if marketing_idx >= 0:
+                                # "마케팅" 이후에 "수신거부" 또는 "수신"과 "거부" 찾기
+                                after_marketing = original_text[marketing_idx:]
+                                after_marketing_lower = after_marketing.lower()
+                                
+                                # "수신거부" 찾기
+                                susin_geobu_idx = after_marketing_lower.find("수신거부")
+                                if susin_geobu_idx >= 0:
+                                    end_idx = marketing_idx + susin_geobu_idx + len("수신거부")
+                                    extracted_keyword = original_text[marketing_idx:end_idx].strip()
+                                else:
+                                    # "수신"과 "거부" 따로 찾기
+                                    susin_idx = after_marketing_lower.find("수신")
+                                    if susin_idx >= 0:
+                                        geobu_idx = after_marketing_lower.find("거부", susin_idx)
+                                        if geobu_idx >= 0:
+                                            end_idx = marketing_idx + geobu_idx + len("거부")
+                                            extracted_keyword = original_text[marketing_idx:end_idx].strip()
+                            
+                            if not extracted_keyword:
+                                matched_merge_keyword = rule["target"]
+                            else:
+                                # "미준수"가 포함되어 있지 않으면 rule["target"] 사용
+                                if not has_mijunsu:
+                                    matched_merge_keyword = rule["target"]
+                                else:
+                                    matched_merge_keyword = extracted_keyword
+                    else:
+                        # 띄어쓰기가 없으면 원본 텍스트에서 직접 찾기
+                        marketing_idx = text_lower.find("마케팅")
+                        extracted_keyword = None
+                        
+                        if marketing_idx >= 0:
+                            after_marketing = text_for_analysis[marketing_idx:]
+                            after_marketing_lower = after_marketing.lower()
+                            
+                            susin_geobu_idx = after_marketing_lower.find("수신거부")
+                            if susin_geobu_idx >= 0:
+                                end_idx = marketing_idx + susin_geobu_idx + len("수신거부")
+                                extracted_keyword = text_for_analysis[marketing_idx:end_idx]
+                            else:
+                                susin_idx = after_marketing_lower.find("수신")
+                                if susin_idx >= 0:
+                                    geobu_idx = after_marketing_lower.find("거부", susin_idx)
+                                    if geobu_idx >= 0:
+                                        end_idx = marketing_idx + geobu_idx + len("거부")
+                                        extracted_keyword = text_for_analysis[marketing_idx:end_idx]
+                        
+                        if not extracted_keyword:
+                            matched_merge_keyword = rule["target"]
+                        else:
+                            # "미준수"가 포함되어 있지 않으면 rule["target"] 사용
+                            if not has_mijunsu:
+                                matched_merge_keyword = rule["target"]
+                            else:
+                                matched_merge_keyword = extracted_keyword
+                    break
+            
+            # 일반적인 병합 규칙
+            elif all(req in text_lower for req in rule["required"]):
+                # 원본 텍스트에서 필수 키워드가 포함된 부분 추출
+                if has_original_spaces:
+                    original_words = original_text.split()
+                    matched_words = []
+                    required_found = {req: False for req in rule["required"]}
+                    
+                    for word in original_words:
+                        word_lower = word.lower().replace(" ", "")
+                        for req in rule["required"]:
+                            if req in word_lower and not required_found[req]:
+                                matched_words.append(word)
+                                required_found[req] = True
+                                break
+                        
+                        if all(required_found.values()):
+                            break
+                    
+                    if matched_words and all(required_found.values()):
+                        matched_merge_keyword = " ".join(matched_words)
+                    else:
+                        matched_merge_keyword = rule["target"]
+                else:
+                    matched_merge_keyword = rule["target"]
+                break
+        
+        # 병합 규칙에 해당하는 키워드가 있으면 그것을 사용하고 다음 텍스트로
+        if matched_merge_keyword:
+            tokens.append(matched_merge_keyword)
+            continue
+        
+        # 형태소 분석 수행
+        toks = tokenize_ko(text_for_analysis)
         
         # 숫자만으로 된 토큰 제거
         # 이유: "123", "456" 같은 숫자는 키워드로 의미 없음
         toks = [tok for tok in toks if len(tok) > 1 and not tok.isdigit()]
+        
+        # 토큰이 없으면 스킵
+        if not toks:
+            continue
 
         # ========================================
         # 2. 토큰 결합 규칙 적용
@@ -233,48 +477,237 @@ def extract_keywords(
                 combined.append(f"{toks[i]} {toks[i + 1]}")
                 i += 2
             
-            # 규칙에 해당 없으면 그대로 추가
+            # 규칙에 해당 없으면 단일 토큰 추가
             else:
                 combined.append(toks[i])
                 i += 1
-
-        tokens.extend(combined)
+        
+        # ========================================
+        # 3. 원본 텍스트의 띄어쓰기 우선 사용
+        # ========================================
+        # 원본에 띄어쓰기가 있으면, 원본 텍스트에서 해당 키워드 부분을 찾아 띄어쓰기 보존
+        if has_original_spaces and combined:
+            # 원본 텍스트를 단어 단위로 분리 (띄어쓰기 기준)
+            original_words = original_text.split()
+            original_text_no_space = "".join(original_words).lower()
+            
+            # 토큰들을 원본 텍스트의 단어들과 매칭하여 띄어쓰기 보존
+            matched_keyword = None
+            
+            # 형태소 분석 결과를 원본 텍스트와 매칭
+            # 토큰 시퀀스를 원본 텍스트에서 찾기
+            token_sequence = "".join([t.replace(" ", "") for t in combined]).lower()
+            
+            # 원본 텍스트에서 토큰 시퀀스가 포함된 부분 찾기
+            if token_sequence in original_text_no_space:
+                # 원본 텍스트에서 해당 부분의 시작과 끝 위치 찾기
+                start_idx = original_text_no_space.find(token_sequence)
+                end_idx = start_idx + len(token_sequence)
+                
+                # 원본 단어들에서 해당 범위에 포함되는 단어들 찾기
+                char_pos = 0
+                matched_words = []
+                for word in original_words:
+                    word_no_space = word.replace(" ", "").lower()
+                    word_start = char_pos
+                    word_end = char_pos + len(word_no_space)
+                    
+                    # 단어가 토큰 시퀀스 범위와 겹치면 포함
+                    if word_start < end_idx and word_end > start_idx:
+                        matched_words.append(word)
+                    
+                    char_pos = word_end
+                    
+                    # 모든 토큰을 포함했으면 종료
+                    if char_pos >= end_idx:
+                        break
+                
+                if matched_words:
+                    matched_keyword = " ".join(matched_words)
+            
+            # 매칭 실패 시, 단어 단위로 재시도
+            if not matched_keyword:
+                # 각 토큰이 원본 단어에 포함되는지 확인
+                matched_words = []
+                token_idx = 0
+                for word in original_words:
+                    word_no_space = word.replace(" ", "").lower()
+                    if token_idx < len(combined):
+                        token_no_space = combined[token_idx].replace(" ", "").lower()
+                        if token_no_space in word_no_space or word_no_space in token_no_space:
+                            matched_words.append(word)
+                            token_idx += 1
+                            if token_idx >= len(combined):
+                                break
+                
+                if matched_words and len(matched_words) == len(combined):
+                    matched_keyword = " ".join(matched_words)
+            
+            # 원본에서 매칭된 키워드가 있으면 사용
+            if matched_keyword:
+                final_keyword = matched_keyword
+            else:
+                # 매칭 실패 시 기존 로직 사용
+                if len(combined) > 1:
+                    final_keyword = " ".join(combined)
+                elif len(combined) == 1:
+                    single_token = combined[0]
+                    if len(single_token) >= 4:
+                        final_keyword = _split_long_token(single_token)
+                    else:
+                        final_keyword = single_token
+                else:
+                    continue
+        else:
+            # 원본에 띄어쓰기가 없으면 기존 로직 사용
+            if len(combined) > 1:
+                final_keyword = " ".join(combined)
+            elif len(combined) == 1:
+                single_token = combined[0]
+                if len(single_token) >= 4:
+                    final_keyword = _split_long_token(single_token)
+                else:
+                    final_keyword = single_token
+            else:
+                continue
+        
+        # 정규화된 키워드(공백 제거)를 키로 하여 원본 띄어쓰기 보존
+        normalized_key = normalize_value(final_keyword)
+        if normalized_key not in original_keyword_map:
+            original_keyword_map[normalized_key] = final_keyword
+        
+        tokens.append(final_keyword)
 
     # ========================================
-    # 3. 토큰 개수 집계
+    # 3. 토큰 개수 집계 (공백 무시하여 통계 집계)
     # ========================================
-    counts = Counter(tokens)
+    # 통계 집계는 공백을 무시하고 수행
+    normalized_counts: Dict[str, Tuple[int, str]] = {}
+    
+    for token in tokens:
+        # 원본 토큰 유지 (띄어쓰기 포함)
+        original_token = token
+        
+        # 병합 규칙 체크용: 공백 제거 버전 (비교용)
+        normalized_token = normalize_value(token)
+        
+        # 정규화된 키워드로 개수 집계 (공백 무시)
+        if normalized_token not in normalized_counts:
+            normalized_counts[normalized_token] = (1, original_token)
+        else:
+            existing_count, existing_token = normalized_counts[normalized_token]
+            # 원본 띄어쓰기가 있는 토큰을 우선 사용
+            if " " in original_token and " " not in existing_token:
+                normalized_counts[normalized_token] = (existing_count + 1, original_token)
+            else:
+                normalized_counts[normalized_token] = (existing_count + 1, existing_token)
     
     # ========================================
     # 4. 유사 키워드 병합
     # ========================================
-    merged_counts: Dict[str, int] = {}
+    # 키: 정규화된 키워드(비교용), 값: (개수, 원본 키워드 - 띄어쓰기 포함)
+    merged_counts: Dict[str, Tuple[int, str]] = {}
     
-    for token, count in counts.items():
-        # 정규화 (유사 표현 통합)
-        normalized_token = normalize_value(token)
-        
+    for normalized_key, (count, original_token) in normalized_counts.items():
         # 병합 규칙 적용
         merged = False
         for rule in merge_rules:
-            # 필수 키워드가 모두 포함되어 있는지 확인
+            # 필수 키워드가 모두 포함되어 있는지 확인 (공백 제거 버전으로 비교)
             # 예: "확정", "먹통"이 모두 있으면 "확정 관련 먹통"으로 병합
-            if all(req in normalized_token for req in rule["required"]):
-                target = rule["target"]
-                merged_counts[target] = merged_counts.get(target, 0) + count
+            required_matched = all(req in normalized_key for req in rule["required"])
+            
+            # 특수 케이스: "마케팅 수신거부 미준수"의 경우 "수신"과 "거부"가 분리되어도 인식
+            if rule["target"] == "마케팅 수신거부 미준수":
+                # "마케팅"이 있고, ("수신거부" 또는 ("수신"과 "거부"가 모두) 있으면 병합
+                has_marketing = "마케팅" in normalized_key
+                has_susin_geobu = "수신거부" in normalized_key
+                has_susin = "수신" in normalized_key
+                has_geobu = "거부" in normalized_key
+                
+                if has_marketing and (has_susin_geobu or (has_susin and has_geobu)):
+                    # 원본에 띄어쓰기가 있으면 그것을 우선 사용
+                    # 원본에 "마케팅 수신거부" 관련 키워드가 있으면 그것을 사용
+                    if " " in original_token:
+                        # 원본에 "마케팅"과 "수신거부" 관련 키워드가 모두 포함되어 있는지 확인
+                        original_lower = original_token.lower()
+                        if "마케팅" in original_lower and ("수신거부" in original_lower or ("수신" in original_lower and "거부" in original_lower)):
+                            target = original_token
+                        else:
+                            # 원본에 일부만 있으면 규칙의 target 사용
+                            target = rule["target"]
+                    else:
+                        # 원본에 띄어쓰기가 없으면 규칙의 target 사용
+                        target = rule["target"]
+                    
+                    # 병합 키는 정규화된 버전 사용 (공백 무시)
+                    merge_key = normalize_value(target)
+                    if merge_key not in merged_counts:
+                        merged_counts[merge_key] = (count, target)
+                    else:
+                        existing_count, existing_target = merged_counts[merge_key]
+                        # 원본 띄어쓰기가 있는 경우 우선 사용
+                        if " " in target and " " not in existing_target:
+                            merged_counts[merge_key] = (existing_count + count, target)
+                        else:
+                            merged_counts[merge_key] = (existing_count + count, existing_target)
+                    merged = True
+                    break
+            
+            # 일반적인 병합 규칙
+            elif required_matched:
+                # 원본에 띄어쓰기가 있으면 그것을 우선 사용
+                if " " in original_token:
+                    # 원본에 필수 키워드가 모두 포함되어 있는지 확인
+                    original_lower = original_token.lower()
+                    if all(req in original_lower for req in rule["required"]):
+                        target = original_token
+                    else:
+                        # 원본에 일부만 있으면 규칙의 target 사용
+                        target = rule["target"]
+                else:
+                    # 원본에 띄어쓰기가 없으면 규칙의 target 사용
+                    target = rule["target"]
+                
+                # 병합 키는 정규화된 버전 사용 (공백 무시)
+                merge_key = normalize_value(target)
+                if merge_key not in merged_counts:
+                    merged_counts[merge_key] = (count, target)
+                else:
+                    existing_count, existing_target = merged_counts[merge_key]
+                    # 원본 띄어쓰기가 있는 경우 우선 사용
+                    if " " in target and " " not in existing_target:
+                        merged_counts[merge_key] = (existing_count + count, target)
+                    else:
+                        merged_counts[merge_key] = (existing_count + count, existing_target)
                 merged = True
                 break
         
-        # 병합 규칙에 해당 없으면 그대로 집계
+        # 병합 규칙에 해당 없으면 원본 토큰(띄어쓰기 포함)으로 집계
         if not merged:
-            merged_counts[normalized_token] = merged_counts.get(normalized_token, 0) + count
+            # 정규화된 키를 사용하여 통계 집계 (공백 무시)
+            # 하지만 최종 반환값은 원본 토큰을 유지
+            if normalized_key not in merged_counts:
+                # 첫 번째로 나온 원본 토큰을 저장
+                merged_counts[normalized_key] = (count, original_token)
+            else:
+                # 기존 항목의 개수 증가
+                existing_count, existing_token = merged_counts[normalized_key]
+                # 원본 띄어쓰기가 있는 토큰을 우선 사용
+                if " " in original_token and " " not in existing_token:
+                    merged_counts[normalized_key] = (existing_count + count, original_token)
+                else:
+                    merged_counts[normalized_key] = (existing_count + count, existing_token)
     
     # ========================================
     # 5. 상위 N개 추출
     # ========================================
-    # 개수 많은 순으로 정렬
-    top = sorted(merged_counts.items(), key=lambda x: x[1], reverse=True)[:top_n]
+    # (개수, 원본 키워드) 튜플로 변환
+    # merged_counts의 값은 (count, original_token) 튜플이므로 원본 토큰을 가져옴
+    final_items = [(count, original_token) for key, (count, original_token) in merged_counts.items()]
     
-    # 딕셔너리 형태로 변환
-    return [{"name": k, "count": int(v)} for k, v in top]
+    # 개수 많은 순으로 정렬
+    top = sorted(final_items, key=lambda x: x[0], reverse=True)[:top_n]
+    
+    # 딕셔너리 형태로 변환 (원본 토큰 사용 - 띄어쓰기 포함)
+    return [{"name": original_token, "count": int(count)} for count, original_token in top]
 

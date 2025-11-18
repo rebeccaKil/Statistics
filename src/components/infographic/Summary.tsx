@@ -16,7 +16,11 @@ export function Summary({ title, icon, color, data }: SummaryProps) {
   const IconComponent = getIconComponent(icon);
   const shades = getShades(color);
 
-  if (!data || !data.items || data.items.length === 0) {
+  // 데이터 유효성 검사 강화
+  const items = data?.items || [];
+  const hasValidData = Array.isArray(items) && items.length > 0;
+
+  if (!hasValidData) {
     return (
       <section className="bg-white rounded-2xl shadow-lg p-6">
         <div className="flex items-center mb-6">
@@ -40,17 +44,21 @@ export function Summary({ title, icon, color, data }: SummaryProps) {
       </div>
       
       <ul className="space-y-3">
-        {data.items.map((item, index) => (
-          <li key={index} className="flex items-start">
-            <span 
-              className="inline-flex items-center justify-center w-6 h-6 rounded-full font-bold text-sm mr-3 flex-shrink-0 mt-0.5 text-white"
-              style={{ backgroundColor: shades.text500 }}
-            >
-              •
-            </span>
-            <span className="text-slate-700 text-base">{item}</span>
-          </li>
-        ))}
+        {items.map((item, index) => {
+          // item이 문자열인지 확인
+          const itemText = typeof item === 'string' ? item : String(item || '');
+          return (
+            <li key={index} className="flex items-start">
+              <span 
+                className="inline-flex items-center justify-center w-6 h-6 rounded-full font-bold text-sm mr-3 flex-shrink-0 mt-0.5 text-white"
+                style={{ backgroundColor: shades.text500 }}
+              >
+                •
+              </span>
+              <span className="text-slate-700 text-base">{itemText}</span>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

@@ -1,5 +1,6 @@
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
+import re
 import pandas as pd
 from ..utils.date_utils import try_parse_date
 from ..normalizers.text_normalizer import normalize_value
@@ -19,11 +20,12 @@ MAX_DAILY_BREAKDOWN_DAYS = 10
 MAX_CATEGORY_ITEMS = 5
 
 # 요약에 포함할 키워드 개수
-# 이유: 키워드는 5개 추출하지만 요약에는 4개만 표시
-MAX_SUMMARY_KEYWORDS = 4
+# 이유: 중요한 항목을 더 많이 노출하기 위해 기본값을 늘림
+MAX_SUMMARY_KEYWORDS = 6
 
 # 추출할 전체 키워드 개수
-MAX_KEYWORDS_TO_EXTRACT = 5
+# 이유: 상위 10개까지 추출해 다양한 이슈를 포착
+MAX_KEYWORDS_TO_EXTRACT = 10
 
 
 def month_filter(
@@ -225,26 +227,56 @@ def calc_stats(
             distributions[col] = []
     
     # ========================================
-    # 4. 텍스트 키워드 요약
+    # 4. 텍스트 원문 요약 (원문 그대로 표시, 띄어쓰기 무시하고 통계 집계)
     # ========================================
     summary_items: List[str] = []
     
     if text_col and text_col in df.columns:
         try:
-            # 텍스트 컬럼 추출
-            texts = df[text_col].astype(str).tolist()
+            # 텍스트 컬럼 추출 (원문 그대로)
+            # pandas의 fillna로 NaN을 빈 문자열로 변환 후 처리
+            texts_series = df[text_col].fillna('').astype(str)
+            texts = texts_series.tolist()
             
-            # 키워드 추출
-            keywords_data = extract_keywords(
-                texts, 
-                top_n=MAX_KEYWORDS_TO_EXTRACT
-            )
+            # 빈 텍스트 제거 및 공백 정리
+            # NaN, None, 빈 문자열, 'nan' 문자열 모두 제거
+            valid_texts = []
+            for t in texts:
+                if t and isinstance(t, str):
+                    t_clean = t.strip()
+                    if t_clean and t_clean.lower() not in ['nan', 'none', 'null', '']:
+                        valid_texts.append(t_clean)
             
-            # 상위 N개만 요약에 포함
-            for item in keywords_data[:MAX_SUMMARY_KEYWORDS]:
-                summary_items.append(f"[{item['name']}] {item['count']}건")
-        except Exception:
-            # 키워드 추출 실패 시 빈 리스트 유지
+            if valid_texts:
+                # 띄어쓰기를 무시하고 통계 집계
+                # 키: 모든 공백 제거 버전 (통계용), 값: (개수, 원문 텍스트 - 띄어쓰기 우선)
+                text_groups: Dict[str, Tuple[int, str]] = {}
+                
+                for text in valid_texts:
+                    # 모든 공백(띄어쓰기, 탭, 줄바꿈, 전각 공백 등)을 제거하여 비교
+                    normalized = re.sub(r'\s+', '', text)
+                    
+                    if normalized in text_groups:
+                        # 이미 존재하면 개수 증가
+                        count, original = text_groups[normalized]
+                        # 원문에 띄어쓰기가 있으면 그것을 우선 사용
+                        if " " in text and " " not in original:
+                            text_groups[normalized] = (count + 1, text)
+                        else:
+                            text_groups[normalized] = (count + 1, original)
+                    else:
+                        # 처음 나온 텍스트 저장
+                        text_groups[normalized] = (1, text)
+                
+                # 빈도수 많은 순으로 정렬 (상한 없이 전체 노출)
+                sorted_texts = sorted(text_groups.items(), key=lambda x: x[1][0], reverse=True)
+                
+                for normalized, (count, original_text) in sorted_texts:
+                    # 원문 텍스트와 건수를 명확하게 표시
+                    summary_items.append(f"{original_text} - {count}건")
+        except Exception as e:
+            # 원문 추출 실패 시 빈 리스트 유지
+            # 디버깅을 위해 예외 정보는 로그로 남기지 않음 (프로덕션 환경)
             pass
 
     # ========================================
