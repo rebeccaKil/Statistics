@@ -2,9 +2,13 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 import re
 import pandas as pd
+import logging
 from ..utils.date_utils import try_parse_date
 from ..normalizers.text_normalizer import normalize_value
 from .keyword_extractor import extract_keywords
+
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -223,7 +227,8 @@ def calc_stats(
                 for idx, cnt in others.items()
             ]
         except Exception:
-            # 집계 실패 시 빈 리스트
+            # 상세 디버깅을 위해 컬럼명과 예외 로그 남김
+            logger.exception("Failed to build distribution for column '%s'", col)
             distributions[col] = []
     
     # ========================================
@@ -252,7 +257,6 @@ def calc_stats(
                 # 전체 텍스트를 한 번에 처리하여 병합 규칙 적용
                 # extract_keywords는 병합 규칙을 적용하여 유사한 키워드들을 통합함
                 from collections import defaultdict
-                from ..normalizers.text_normalizer import normalize_value
                 from ..analyzers.keyword_extractor import MERGE_RULES
                 
                 # 전체 텍스트 리스트를 한 번에 처리 (병합 규칙이 제대로 작동하도록)
