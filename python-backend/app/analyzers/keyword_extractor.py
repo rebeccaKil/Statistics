@@ -21,12 +21,13 @@ except Exception:
 # 예: "문의합니다", "확인해주세요" 같은 일반적인 표현
 KOREAN_STOPWORDS = {
     # 의문/요청 표현
-    "문의", "요청", "여부", "확인", "있나요", "있습니다", "해주세요",
+    "문의", "요청", "확인", "있나요", "있습니다", "해주세요",
     # 조사/어미
     "중", "했는데", "했으나", "됩니다", "되었습니다", "합니다", "입니다",
     "하고", "에서", "으로", "하면", "그런데", "때문", "어떻게",
     # 상태 표현
-    "안됨", "이상", "가능", "불가",
+    "안됨", "이상", "불가",
+    # 주의: "여부", "가능"은 병합 규칙에서 사용되므로 불용어에서 제외
 }
 
 # ============================================================
@@ -57,6 +58,88 @@ COMBINE_RULES: Set[Tuple[str, str]] = {
 # 이유: "확정 버튼 먹통", "확정 페이지 먹통" 등을 "확정 관련 먹통"으로 통합
 # 프로젝트별로 도메인에 맞게 수정 필요
 MERGE_RULES: List[Dict[str, Any]] = [
+    # 여행 문의 관련 통합 규칙
+    {
+        "target": "확정 여부",
+        "required": ["확정", "여부"],
+        "optional": ["예약", "문의", "확인", "가능"]
+    },
+    {
+        "target": "예약 가능 여부",
+        "required": ["가능"],
+        "optional": ["예약", "여부", "문의", "확인", "날짜", "진행"]
+    },
+    {
+        "target": "취소 가능 여부",
+        "required": ["취소", "가능"],
+        "optional": ["여부", "문의", "확인", "요청"]
+    },
+    {
+        "target": "픽업/드랍",
+        "required": [],
+        "optional": ["픽업", "드랍", "관련", "문의", "장소", "시간", "위치"]
+    },
+    {
+        "target": "상품 문의",
+        "required": [],
+        "optional": ["상품", "투어", "이용", "출발", "시간", "현장", "지불금", "진행"]
+    },
+    {
+        "target": "불만/민원",
+        "required": [],
+        "optional": ["불만", "민원"]
+    },
+    {
+        "target": "취소 사유",
+        "required": ["취소", "사유"],
+        "optional": ["문의", "확인", "거절"]
+    },
+    {
+        "target": "취소 사유",
+        "required": [],
+        "optional": ["거절", "사유"]
+    },
+    {
+        "target": "취소 요청",
+        "required": ["취소", "요청"],
+        "optional": ["문의", "가능", "여부"]
+    },
+    {
+        "target": "상세 일정 문의",
+        "required": ["일정"],
+        "optional": ["상세", "세부", "문의", "확인", "출발", "시간", "투어"]
+    },
+    {
+        "target": "예약 확인",
+        "required": ["예약", "확인"],
+        "optional": ["문의", "여부", "가능", "건", "내역"]
+    },
+    {
+        "target": "일정 변경",
+        "required": ["일정", "변경"],
+        "optional": ["문의", "가능", "여부", "요청"]
+    },
+    {
+        "target": "환불 관련",
+        "required": ["환불"],
+        "optional": ["관련", "문의", "여부", "전액", "추가", "진행"]
+    },
+    {
+        "target": "옵션/포함사항",
+        "required": [],
+        "optional": ["옵션", "포함", "사항", "불포함", "문의", "확인", "변경", "상세"]
+    },
+    {
+        "target": "취소 수수료",
+        "required": ["취소", "수수료"],
+        "optional": ["문의", "확인", "환불"]
+    },
+    {
+        "target": "예약 취소",
+        "required": ["예약", "취소"],
+        "optional": ["문의", "요청", "가능", "여부"]
+    },
+    # 기존 오류 관련 규칙
     {
         "target": "확정 관련 먹통",
         "required": ["확정", "먹통"],  # 반드시 포함되어야 하는 단어
@@ -300,7 +383,9 @@ def extract_keywords(
         text_lower = text_for_analysis.lower()
         
         # 우선순위: 필수 키워드가 많은 규칙을 먼저 체크 (더 구체적인 규칙 우선)
-        sorted_rules = sorted(merge_rules, key=lambda r: (-len(r["required"]), r["target"]))
+        # required가 빈 리스트인 규칙은 텍스트 추출 단계에서는 제외 (나중에 병합 단계에서 처리)
+        sorted_rules = [r for r in merge_rules if r["required"]]  # required가 있는 규칙만 체크
+        sorted_rules = sorted(sorted_rules, key=lambda r: (-len(r["required"]), r["target"]))
         
         for rule in sorted_rules:
             # 특수 케이스: "마케팅 수신거부 미준수" (required에 "수신거부"가 있지만 "수신"과 "거부"로 분리될 수 있음)
@@ -435,7 +520,7 @@ def extract_keywords(
                             break
                     
                     if matched_words and all(required_found.values()):
-                        matched_merge_keyword = " ".join(matched_words)
+                        matched_merge_keyword = rule["target"]
                     else:
                         matched_merge_keyword = rule["target"]
                 else:
@@ -454,8 +539,10 @@ def extract_keywords(
         # 이유: "123", "456" 같은 숫자는 키워드로 의미 없음
         toks = [tok for tok in toks if len(tok) > 1 and not tok.isdigit()]
         
-        # 토큰이 없으면 스킵
+        # 토큰이 없으면 원본 텍스트를 그대로 사용 (전체 숫자 맞추기 위해)
         if not toks:
+            # 원본 텍스트를 키워드로 사용 (불용어만 있거나 토큰이 없는 경우)
+            tokens.append(original_text)
             continue
 
         # ========================================
@@ -557,7 +644,8 @@ def extract_keywords(
                     else:
                         final_keyword = single_token
                 else:
-                    continue
+                    # combined가 비어있으면 원본 텍스트를 그대로 사용
+                    final_keyword = original_text
         else:
             # 원본에 띄어쓰기가 없으면 기존 로직 사용
             if len(combined) > 1:
@@ -569,7 +657,8 @@ def extract_keywords(
                 else:
                     final_keyword = single_token
             else:
-                continue
+                # combined가 비어있으면 원본 텍스트를 그대로 사용
+                final_keyword = original_text
         
         # 정규화된 키워드(공백 제거)를 키로 하여 원본 띄어쓰기 보존
         normalized_key = normalize_value(final_keyword)
@@ -611,7 +700,12 @@ def extract_keywords(
     for normalized_key, (count, original_token) in normalized_counts.items():
         # 병합 규칙 적용
         merged = False
-        for rule in merge_rules:
+        # 우선순위: required가 있는 규칙을 먼저 체크, required가 빈 리스트인 규칙은 나중에 체크
+        rules_with_required = [r for r in merge_rules if r["required"]]
+        rules_without_required = [r for r in merge_rules if not r["required"]]
+        sorted_rules = sorted(rules_with_required, key=lambda r: (-len(r["required"]), r["target"])) + rules_without_required
+        
+        for rule in sorted_rules:
             # 필수 키워드가 모두 포함되어 있는지 확인 (공백 제거 버전으로 비교)
             # 예: "확정", "먹통"이 모두 있으면 "확정 관련 먹통"으로 병합
             required_matched = all(req in normalized_key for req in rule["required"])
@@ -653,6 +747,64 @@ def extract_keywords(
                     merged = True
                     break
             
+            # required가 빈 리스트인 경우: optional 키워드 중 특정 키워드들이 포함되어야 병합
+            elif len(rule["required"]) == 0:
+                # 특수 처리: 각 규칙별로 필요한 키워드 조합 확인
+                if rule["target"] == "픽업/드랍":
+                    # "픽업" 또는 "드랍"이 포함되어 있어야 함
+                    has_pickup = "픽업" in normalized_key
+                    has_drop = "드랍" in normalized_key
+                    if has_pickup or has_drop:
+                        target = rule["target"]
+                    else:
+                        continue
+                elif rule["target"] == "옵션/포함사항":
+                    # "옵션" 또는 "포함"이 포함되어 있어야 함
+                    has_option = "옵션" in normalized_key
+                    has_include = "포함" in normalized_key
+                    if has_option or has_include:
+                        target = rule["target"]
+                    else:
+                        continue
+                elif rule["target"] == "불만/민원":
+                    # "불만" 또는 "민원"이 반드시 포함되어 있어야 함
+                    # 단, "일정"이 포함된 경우는 제외 (일정 문의와 구분)
+                    has_complaint = "불만" in normalized_key
+                    has_grievance = "민원" in normalized_key
+                    has_schedule = "일정" in normalized_key
+                    if (has_complaint or has_grievance) and not has_schedule:
+                        target = rule["target"]
+                    else:
+                        continue
+                elif rule["target"] == "상품 문의":
+                    product_keywords = ["상품", "투어", "이용", "현장", "지불금", "출발", "시간"]
+                    if any(pk in normalized_key for pk in product_keywords):
+                        target = rule["target"]
+                    else:
+                        continue
+                elif rule["target"] == "취소 사유":
+                    if "거절" in normalized_key and "사유" in normalized_key:
+                        target = rule["target"]
+                    else:
+                        continue
+                else:
+                    # 다른 규칙은 optional 키워드 중 하나라도 매칭되면 병합
+                    optional_matched = any(opt in normalized_key for opt in rule["optional"])
+                    if optional_matched:
+                        target = rule["target"]
+                    else:
+                        continue
+                
+                # 병합 키는 정규화된 버전 사용 (공백 무시)
+                merge_key = normalize_value(target)
+                if merge_key not in merged_counts:
+                    merged_counts[merge_key] = (count, target)
+                else:
+                    existing_count, existing_target = merged_counts[merge_key]
+                    merged_counts[merge_key] = (existing_count + count, existing_target)
+                merged = True
+                break
+            
             # 일반적인 병합 규칙
             elif required_matched:
                 # 원본에 띄어쓰기가 있으면 그것을 우선 사용
@@ -667,6 +819,18 @@ def extract_keywords(
                 else:
                     # 원본에 띄어쓰기가 없으면 규칙의 target 사용
                     target = rule["target"]
+                
+                # 특수 처리: "예약 가능" -> "예약 가능 여부"로 병합
+                # "예약 가능"이 "예약 가능 여부" 규칙에 매칭되도록
+                if rule["target"] == "예약 가능 여부":
+                    has_possible = "가능" in normalized_key or "가능여부" in normalized_key
+                    has_reservation = "예약" in normalized_key or "진행" in normalized_key or "예약가능" in normalized_key
+                    if has_possible and (has_reservation or "가능여부" in normalized_key):
+                        target = rule["target"]
+                elif rule["target"] == "취소 가능 여부":
+                    # "취소"와 "가능"이 모두 있으면 "취소 가능 여부"로 병합
+                    if "취소" in normalized_key and "가능" in normalized_key:
+                        target = rule["target"]
                 
                 # 병합 키는 정규화된 버전 사용 (공백 무시)
                 merge_key = normalize_value(target)

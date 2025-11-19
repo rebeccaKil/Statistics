@@ -346,6 +346,16 @@ def _build_single_report(current_stats, cat_cols, current_df, text_col, target_m
             data={"items": current_stats["summary_items"]}
         ))
     
+    if current_stats.get("summary_details"):
+        components.append(Component(
+            component_type='summary_details',
+            title=f'{target_month}월 주요 오류 상세 매핑',
+            source_column='summary_details',
+            icon='align-left',
+            color='amber',
+            data={"items": current_stats["summary_details"]}
+        ))
+    
     try:
         if text_col and text_col in current_df.columns:
             curr_texts = current_df[text_col].astype(str).tolist()
@@ -418,6 +428,16 @@ def _build_comparison_report(df, date_col, cat_cols, text_col, current_stats, cu
             icon='alert-triangle',
             color='rose',
             data={"items": current_stats["summary_items"]}
+        ))
+    
+    if current_stats.get("summary_details"):
+        components.append(Component(
+            component_type='summary_details',
+            title=f'{target_month}월 주요 오류 상세 매핑',
+            source_column='summary_details',
+            icon='align-left',
+            color='amber',
+            data={"items": current_stats["summary_details"]}
         ))
     
     try:

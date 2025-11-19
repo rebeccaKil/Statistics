@@ -227,9 +227,10 @@ def calc_stats(
             distributions[col] = []
     
     # ========================================
-    # 4. 텍스트 원문 요약 (원문 그대로 표시, 띄어쓰기 무시하고 통계 집계)
+    # 4. 텍스트 키워드 요약 (키워드 추출 및 병합 적용)
     # ========================================
-    summary_items: List[str] = []
+    summary_items: List[Dict[str, Any]] = []
+    summary_details: List[Dict[str, Any]] = []
     
     if text_col and text_col in df.columns:
         try:
@@ -248,34 +249,105 @@ def calc_stats(
                         valid_texts.append(t_clean)
             
             if valid_texts:
-                # 띄어쓰기를 무시하고 통계 집계
-                # 키: 모든 공백 제거 버전 (통계용), 값: (개수, 원문 텍스트 - 띄어쓰기 우선)
-                text_groups: Dict[str, Tuple[int, str]] = {}
+                # 전체 텍스트를 한 번에 처리하여 병합 규칙 적용
+                # extract_keywords는 병합 규칙을 적용하여 유사한 키워드들을 통합함
+                from collections import defaultdict
+                from ..normalizers.text_normalizer import normalize_value
+                from ..analyzers.keyword_extractor import MERGE_RULES
                 
+                # 전체 텍스트 리스트를 한 번에 처리 (병합 규칙이 제대로 작동하도록)
+                keywords = extract_keywords(valid_texts, top_n=len(valid_texts) * 2)
+                
+                # 키워드 -> 원문 텍스트 매핑 생성
+                # 각 텍스트가 어떤 키워드로 변환되었는지 추적
+                keyword_to_texts = defaultdict(list)
+                
+                # 병합 규칙에 해당하는 키워드 목록 생성 (정규화된 버전)
+                merged_keywords = set()
+                for rule in MERGE_RULES:
+                    merged_keywords.add(normalize_value(rule["target"]))
+                
+                # 각 텍스트를 개별적으로 키워드로 변환하여 매핑
+                # 병합 규칙이 적용되도록 전체 리스트에서 처리
                 for text in valid_texts:
-                    # 모든 공백(띄어쓰기, 탭, 줄바꿈, 전각 공백 등)을 제거하여 비교
-                    normalized = re.sub(r'\s+', '', text)
-                    
-                    if normalized in text_groups:
-                        # 이미 존재하면 개수 증가
-                        count, original = text_groups[normalized]
-                        # 원문에 띄어쓰기가 있으면 그것을 우선 사용
-                        if " " in text and " " not in original:
-                            text_groups[normalized] = (count + 1, text)
-                        else:
-                            text_groups[normalized] = (count + 1, original)
+                    # 단일 텍스트에 대해 키워드 추출 (병합 규칙 적용)
+                    text_keywords = extract_keywords([text], top_n=1)
+                    if text_keywords:
+                        keyword = text_keywords[0]['name']
+                        # 정규화된 키워드로 매핑 (병합된 키워드와 매칭하기 위해)
+                        normalized_keyword = normalize_value(keyword)
+                        keyword_to_texts[normalized_keyword].append(text)
                     else:
-                        # 처음 나온 텍스트 저장
-                        text_groups[normalized] = (1, text)
+                        # 키워드 추출 실패 시 원문 사용
+                        normalized_text = normalize_value(text)
+                        keyword_to_texts[normalized_text].append(text)
                 
-                # 빈도수 많은 순으로 정렬 (상한 없이 전체 노출)
-                sorted_texts = sorted(text_groups.items(), key=lambda x: x[1][0], reverse=True)
+                detail_items: List[Dict[str, Any]] = []
+                other_texts = []  # 병합 규칙에 해당하지 않는 텍스트들
                 
-                for normalized, (count, original_text) in sorted_texts:
-                    # 원문 텍스트와 건수를 명확하게 표시
-                    summary_items.append(f"{original_text} - {count}건")
+                for kw in keywords:
+                    keyword_name = kw['name']
+                    count = kw['count']
+                    
+                    # 정규화된 키워드로 매핑 찾기
+                    normalized_keyword = normalize_value(keyword_name)
+                    
+                    # 해당 키워드에 매핑된 모든 원문 텍스트 가져오기
+                    if normalized_keyword in keyword_to_texts:
+                        examples = keyword_to_texts[normalized_keyword]
+                        # 중복 제거 (같은 텍스트가 여러 번 나올 수 있음)
+                        unique_examples = list(dict.fromkeys(examples))
+                        
+                        # 병합 규칙에 해당하는지 확인
+                        if normalized_keyword in merged_keywords:
+                            # 병합 규칙에 해당하는 경우
+                            detail_items.append({
+                                "name": keyword_name,
+                                "count": count,
+                                "sources": unique_examples
+                            })
+                        else:
+                            # 병합 규칙에 해당하지 않는 경우 "기타"로 분류
+                            other_texts.extend(unique_examples)
+                    else:
+                        # 매핑에 없으면 키워드만 표시 (병합 규칙에 해당하지 않을 수 있음)
+                        if normalized_keyword not in merged_keywords:
+                            other_texts.append(keyword_name)
+                        else:
+                            detail_items.append({
+                                "name": keyword_name,
+                                "count": count,
+                                "sources": [keyword_name]
+                            })
+                
+                # 전체 숫자 검증 및 "기타" 처리
+                total_keyword_count = sum(kw['count'] for kw in keywords)
+                processed_texts = set()
+                for item in detail_items:
+                    for source in item.get("sources", []):
+                        processed_texts.add(source)
+                
+                # 처리되지 않은 텍스트들을 "기타"에 추가
+                for text in valid_texts:
+                    if text not in processed_texts:
+                        other_texts.append(text)
+                
+                # "기타" 항목 추가 (중복 제거)
+                if other_texts:
+                    unique_others = list(dict.fromkeys(other_texts))
+                    detail_items.append({
+                        "name": "기타",
+                        "count": len(unique_others),
+                        "sources": unique_others
+                    })
+
+                summary_details = detail_items
+                summary_items = [
+                    {"name": item["name"], "count": item["count"]}
+                    for item in detail_items
+                ]
         except Exception as e:
-            # 원문 추출 실패 시 빈 리스트 유지
+            # 키워드 추출 실패 시 빈 리스트 유지
             # 디버깅을 위해 예외 정보는 로그로 남기지 않음 (프로덕션 환경)
             pass
 
@@ -288,6 +360,7 @@ def calc_stats(
         "distributions": distributions,
         "daily_list": daily_list,
         "summary_items": summary_items,
+        "summary_details": summary_details,
         "distributions_others": distributions_others,
     }
 

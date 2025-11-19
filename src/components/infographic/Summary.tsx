@@ -8,7 +8,10 @@ interface SummaryProps {
   icon: string;
   color: string;
   data: {
-    items: string[];
+    items: Array<{
+      name: string;
+      count: number;
+    }>;
   };
 }
 
@@ -44,21 +47,19 @@ export function Summary({ title, icon, color, data }: SummaryProps) {
       </div>
       
       <ul className="space-y-3">
-        {items.map((item, index) => {
-          // item이 문자열인지 확인
-          const itemText = typeof item === 'string' ? item : String(item || '');
-          return (
-            <li key={index} className="flex items-start">
-              <span 
-                className="inline-flex items-center justify-center w-6 h-6 rounded-full font-bold text-sm mr-3 flex-shrink-0 mt-0.5 text-white"
-                style={{ backgroundColor: shades.text500 }}
-              >
-                •
-              </span>
-              <span className="text-slate-700 text-base">{itemText}</span>
-            </li>
-          );
-        })}
+        {items.map((item, index) => (
+          <li key={index} className="flex items-start">
+            <span 
+              className="inline-flex items-center justify-center w-6 h-6 rounded-full font-bold text-sm mr-3 flex-shrink-0 mt-0.5 text-white"
+              style={{ backgroundColor: shades.text500 }}
+            >
+              •
+            </span>
+            <span className="text-slate-700 text-base">
+              {item.name} - {item.count}건
+            </span>
+          </li>
+        ))}
       </ul>
     </section>
   );

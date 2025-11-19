@@ -106,7 +106,25 @@ export interface SummaryComponent {
   icon: string;
   color: string;
   data: {
-    items: string[];
+    items: Array<{
+      name: string;
+      count: number;
+    }>;
+  };
+}
+
+export interface SummaryDetailsComponent {
+  component_type: 'summary_details';
+  title: string;
+  source_column: string;
+  icon: string;
+  color: string;
+  data: {
+    items: Array<{
+      name: string;
+      count: number;
+      sources: string[];
+    }>;
   };
 }
 
@@ -151,6 +169,7 @@ export type InfographicComponent =
   | ComparisonBarChartComponent
   | DailyBreakdownComponent
   | SummaryComponent
+  | SummaryDetailsComponent
   | CumulativeChartComponent
   | CumulativeColumnComponent
   | MonthlyDistributionComponent;

@@ -7,6 +7,7 @@ import { ComparisonKPI } from './infographic/ComparisonKPI';
 import { ComparisonBarChart } from './infographic/ComparisonBarChart';
 import { DailyBreakdown } from './infographic/DailyBreakdown';
 import { Summary } from './infographic/Summary';
+import { SummaryDetails } from './infographic/SummaryDetails';
 import { CumulativeChart } from './infographic/CumulativeChart';
 import { InfographicComponent, CumulativeChartComponent, isCumulativeColumnComponent } from '@/types';
 
@@ -124,6 +125,8 @@ function renderComponent(component: InfographicComponent) {
       return <DailyBreakdown {...component} />;
     case 'summary':
       return <Summary {...component} />;
+    case 'summary_details':
+      return <SummaryDetails {...component} />;
     case 'cumulative_chart':
       return <CumulativeChart {...component} />;
     case 'cumulative_column':
