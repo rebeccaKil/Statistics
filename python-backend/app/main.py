@@ -173,9 +173,10 @@ def analyze(req: AnalyzeRequest):
         if req.reportType == 'single' or not date_col:
             comps = _build_single_report(current_stats, cat_cols, current_df, text_col, target_month)
             # 여행일/여행일자 컬럼이 있는 경우 월별 분포 추가
+            monthly_source_df = current_df if not current_df.empty else df
             for travel_col_candidate in ['여행일', '여행일자']:
-                if travel_col_candidate in df.columns:
-                    monthly = build_monthly_distribution(df, travel_col_candidate)
+                if travel_col_candidate in monthly_source_df.columns:
+                    monthly = build_monthly_distribution(monthly_source_df, travel_col_candidate)
                     if monthly is not None:
                         comps.append(monthly.dict())
                         break
@@ -188,9 +189,10 @@ def analyze(req: AnalyzeRequest):
             target_year, target_month
         )
         # 여행일/여행일자 월별 분포 추가 (비교 리포트에도 함께 노출)
+        monthly_source_df = current_df if not current_df.empty else df
         for travel_col_candidate in ['여행일', '여행일자']:
-            if travel_col_candidate in df.columns:
-                monthly = build_monthly_distribution(df, travel_col_candidate)
+            if travel_col_candidate in monthly_source_df.columns:
+                monthly = build_monthly_distribution(monthly_source_df, travel_col_candidate)
                 if monthly is not None:
                     comps.append(monthly.dict())
                     break
